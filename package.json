@@ -1,7 +1,18 @@
 {
-  "name": "seklok-waitlist-api",
+  "name": "seklok",
   "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.tsx",
+    "start": "bun run src/index.tsx",
+    "typecheck": "bun x tsc --noEmit",
+    "test": "bun test"
+  },
   "dependencies": {
-    "hono": "^4.0.0"
+    "hono": "^4.7.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
   }
 }

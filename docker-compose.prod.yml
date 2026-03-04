@@ -1,0 +1,20 @@
+services:
+  seklok:
+    build: .
+    container_name: seklok-ts
+    restart: unless-stopped
+    env_file: .env.prod
+    volumes:
+      - ./data:/app/data
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.seklok.rule=Host(`secrets.muid.io`)"
+      - "traefik.http.routers.seklok.entrypoints=websecure"
+      - "traefik.http.routers.seklok.tls.certresolver=letsencrypt"
+      - "traefik.http.services.seklok.loadbalancer.server.port=4430"
+    networks:
+      - web
+
+networks:
+  web:
+    external: true

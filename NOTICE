@@ -1,0 +1,23 @@
+Seklok — Lightweight Self-Hosted Secrets Vault
+Copyright 2026 Kiberos AI (kiberos.ai)
+
+This product was inspired by the concept of Secretsfly by Martin Lévesque
+(https://github.com/martinlevesque/secretsfly). The TypeScript implementation,
+architecture (master-key-in-token, RBAC, AES-256-CBC), and all code are
+original work by Kiberos AI.
+
+If you fork or derive from this project, you must:
+  1. Include this NOTICE file in your distribution
+  2. Clearly state your modifications
+  3. Retain the Apache-2.0 license
+
+---
+
+For Business Users:
+
+If you use Seklok in a commercial product or business context,
+please consider supporting the project:
+  - GitHub Sponsors: https://github.com/sponsors/kiberos-ai
+  - Star the repo: https://github.com/kiberos-ai/seklok
+
+Your support helps maintain and improve this project.

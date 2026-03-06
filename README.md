@@ -53,4 +53,4 @@ If you modify Seklok and deploy it as a network service, you must publish your s
 
 ### Commercial License
 
-For proprietary or commercial use without AGPL-3.0 copyleft obligations, a commercial license is available. Contact [licensing@kiberos.ai](mailto:licensing@kiberos.ai) or visit [seklok.com](https://seklok.com) for details.
+For proprietary or commercial use without AGPL-3.0 copyleft obligations, a commercial license is available. Contact [info@lifeaitools.com](mailto:info@lifeaitools.com) or visit [seklok.com](https://seklok.com) for details.

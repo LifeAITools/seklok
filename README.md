@@ -45,4 +45,12 @@ Content-Type: application/json
 
 ## License
 
-MIT
+[![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+
+This project is licensed under the [GNU Affero General Public License v3.0](LICENSE).
+
+If you modify Seklok and deploy it as a network service, you must publish your source code under the same license.
+
+### Commercial License
+
+For proprietary or commercial use without AGPL-3.0 copyleft obligations, a commercial license is available. Contact [licensing@kiberos.ai](mailto:licensing@kiberos.ai) or visit [seklok.com](https://seklok.com) for details.

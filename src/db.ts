@@ -1,10 +1,12 @@
 import { Database } from "bun:sqlite";
+import { config } from "./config";
 
 export interface Project {
   id: number;
   parent_id: number | null;
   name: string;
   description: string;
+  owner_id: string | null;
 }
 
 export interface Environment {
@@ -39,6 +41,34 @@ export interface ServiceToken {
   rights: string;
 }
 
+export interface User {
+  id: string;
+  email: string;
+  password_hash: string | null;
+  name: string;
+  google_id: string | null;
+  role: string;
+  email_verified: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Session {
+  id: string;
+  user_id: string;
+  token_hash: string;
+  expires_at: number;
+  created_at: string;
+}
+
+export interface VerificationToken {
+  id: string;
+  user_id: string;
+  token_hash: string;
+  expires_at: number;
+  created_at: string;
+}
+
 let db: Database | null = null;
 
 export function getDb(): Database {
@@ -55,11 +85,40 @@ export function initDb(environments: string[]): void {
   const database = getDb();
 
   database.exec(`
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT,
+      name TEXT NOT NULL,
+      google_id TEXT UNIQUE,
+      role TEXT NOT NULL DEFAULT 'user' CHECK(role IN ('user', 'admin')),
+      email_verified INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS verification_tokens (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      expires_at INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS projects (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       parent_id INTEGER REFERENCES projects(id),
       name TEXT UNIQUE NOT NULL,
-      description TEXT DEFAULT ''
+      description TEXT DEFAULT '',
+      owner_id TEXT REFERENCES users(id)
     );
 
     CREATE TABLE IF NOT EXISTS environments (
@@ -97,7 +156,17 @@ export function initDb(environments: string[]): void {
     );
     CREATE INDEX IF NOT EXISTS idx_st_proj_env ON service_tokens(project_id, environment_id);
     CREATE INDEX IF NOT EXISTS idx_st_hash ON service_tokens(token_hash);
+
+    CREATE INDEX IF NOT EXISTS idx_users_google_id ON users(google_id);
+    CREATE INDEX IF NOT EXISTS idx_sessions_token_hash ON sessions(token_hash);
+    CREATE INDEX IF NOT EXISTS idx_verification_tokens_token_hash ON verification_tokens(token_hash);
   `);
+
+  // Add owner_id column to existing projects table if missing
+  const cols = database.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
+  if (!cols.some((col) => col.name === "owner_id")) {
+    database.exec("ALTER TABLE projects ADD COLUMN owner_id TEXT REFERENCES users(id)");
+  }
 
   const insert = database.prepare(
     "INSERT OR IGNORE INTO environments (name) VALUES (?)"
@@ -105,4 +174,35 @@ export function initDb(environments: string[]): void {
   for (const env of environments) {
     insert.run(env);
   }
+
+  seedAdmin(database);
 }
+
+async function seedAdmin(database: Database): Promise<void> {
+  const existing = database
+    .query("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
+    .get() as { id: string } | null;
+
+  if (existing) return;
+
+  if (!config.adminUser || !config.adminPass) return;
+
+  const adminId = crypto.randomUUID();
+  const passwordHash = await Bun.password.hash(config.adminPass, {
+    algorithm: "argon2id",
+  });
+
+  database
+    .prepare(
+      "INSERT INTO users (id, email, password_hash, name, role, email_verified) VALUES (?, ?, ?, ?, 'admin', 1)"
+    )
+    .run(adminId, config.adminUser, passwordHash, config.adminUser);
+
+  database
+    .prepare("UPDATE projects SET owner_id = ? WHERE owner_id IS NULL")
+    .run(adminId);
+
+  console.log(`[seklok] Seeded admin user: ${config.adminUser}`);
+}
+
+export { seedAdmin };

@@ -5,11 +5,12 @@ import { getDb, type Project, type Environment, type Secret, type SecretValueHis
 import { encrypt, decrypt } from "../../lib/encryption.js";
 import { getMasterKey, isProjectSealed } from "../../lib/master-keys.js";
 import { Layout } from "../../views/layout.js";
-import { basicAuth } from "../../middleware/basic-auth.js";
+import { requireAuth } from "../../middleware/session.js";
+import { requireOwnerOrAdmin } from "../../middleware/ownership.js";
 
 const app = new Hono();
 
-app.use("*", basicAuth);
+app.use("*", requireAuth);
 
 const SECRET_DEFAULT_VALUE = "--------";
 
@@ -159,7 +160,7 @@ const SecretsPage: FC<{
 // --- Routes ---
 
 // GET /projects/:pid/environments/:eid/secrets
-app.get("/projects/:pid/environments/:eid/secrets", (c) => {
+app.get("/projects/:pid/environments/:eid/secrets", requireOwnerOrAdmin("pid"), (c) => {
   const projectId = Number(c.req.param("pid"));
   const envId = Number(c.req.param("eid"));
   const withDecrypt = c.req.query("decrypt") === "true";
@@ -229,7 +230,7 @@ app.get("/projects/:pid/environments/:eid/secrets", (c) => {
 });
 
 // POST /projects/:pid/environments/:eid/secrets — save secrets
-app.post("/projects/:pid/environments/:eid/secrets", async (c) => {
+app.post("/projects/:pid/environments/:eid/secrets", requireOwnerOrAdmin("pid"), async (c) => {
   const projectId = Number(c.req.param("pid"));
   const envId = Number(c.req.param("eid"));
   const baseUrl = `/admin/projects/${projectId}/environments/${envId}/secrets`;

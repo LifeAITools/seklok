@@ -2,6 +2,12 @@ import type { MiddlewareHandler } from "hono";
 import { config } from "../config";
 
 export const basicAuth: MiddlewareHandler = async (c, next) => {
+  // Skip if user already authenticated via session (sessionOrBasicAuth ran first)
+  try {
+    const existing = c.get("user");
+    if (existing) return next();
+  } catch {}
+
   if (!config.adminUser) {
     return next();
   }

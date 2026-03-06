@@ -7,4 +7,15 @@ export const config = {
     Bun.env.AVAILABLE_ENVIRONMENTS ?? "development,staging,production"
   ).split(","),
   dbPath: Bun.env.DB_PATH ?? "./data/seklok.db",
+  sessionSecret: Bun.env.SESSION_SECRET ?? "change-me-in-production",
+  sessionTtl: Number(Bun.env.SESSION_TTL ?? "604800"),
+  googleClientId: Bun.env.GOOGLE_CLIENT_ID ?? "",
+  googleClientSecret: Bun.env.GOOGLE_CLIENT_SECRET ?? "",
+  googleRedirectUri: Bun.env.GOOGLE_REDIRECT_URI ?? "",
+  smtpHost: Bun.env.SMTP_HOST ?? "smtp.muid.io",
+  smtpPort: Number(Bun.env.SMTP_PORT ?? "587"),
+  smtpUser: Bun.env.SMTP_USER ?? "",
+  smtpPass: Bun.env.SMTP_PASS ?? "",
+  smtpFrom: Bun.env.SMTP_FROM ?? "noreply@seklok.com",
+  appUrl: Bun.env.APP_URL ?? "http://localhost:8099",
 } as const;

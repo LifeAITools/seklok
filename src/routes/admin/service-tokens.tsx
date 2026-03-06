@@ -8,11 +8,12 @@ import {
   type Right,
 } from "../../lib/service-tokens.js";
 import { Layout } from "../../views/layout.js";
-import { basicAuth } from "../../middleware/basic-auth.js";
+import { requireAuth } from "../../middleware/session.js";
+import { requireOwnerOrAdmin } from "../../middleware/ownership.js";
 
 const app = new Hono();
 
-app.use("*", basicAuth);
+app.use("*", requireAuth);
 
 // --- helpers ---
 
@@ -132,7 +133,7 @@ const NewTokenPage: FC<{
 // --- Routes ---
 
 // GET /projects/:pid/service-tokens
-app.get("/projects/:pid/service-tokens", (c) => {
+app.get("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), (c) => {
   const projectId = Number(c.req.param("pid"));
   const db = getDb();
 
@@ -167,7 +168,7 @@ app.get("/projects/:pid/service-tokens", (c) => {
 });
 
 // GET /projects/:pid/service-tokens/new
-app.get("/projects/:pid/service-tokens/new", (c) => {
+app.get("/projects/:pid/service-tokens/new", requireOwnerOrAdmin("pid"), (c) => {
   const projectId = Number(c.req.param("pid"));
   const db = getDb();
 
@@ -190,7 +191,7 @@ app.get("/projects/:pid/service-tokens/new", (c) => {
 });
 
 // POST /projects/:pid/service-tokens — create token
-app.post("/projects/:pid/service-tokens", async (c) => {
+app.post("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), async (c) => {
   const projectId = Number(c.req.param("pid"));
   const db = getDb();
 
@@ -234,7 +235,7 @@ app.post("/projects/:pid/service-tokens", async (c) => {
 });
 
 // POST /projects/:pid/service-tokens/:tid/destroy — revoke
-app.post("/projects/:pid/service-tokens/:tid/destroy", (c) => {
+app.post("/projects/:pid/service-tokens/:tid/destroy", requireOwnerOrAdmin("pid"), (c) => {
   const projectId = Number(c.req.param("pid"));
   const tokenId = Number(c.req.param("tid"));
   const db = getDb();

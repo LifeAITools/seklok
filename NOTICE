@@ -9,15 +9,15 @@ original work by Kiberos AI.
 If you fork or derive from this project, you must:
   1. Include this NOTICE file in your distribution
   2. Clearly state your modifications
-  3. Retain the Apache-2.0 license
+  3. Comply with the AGPL-3.0 license terms
 
 ---
 
-For Business Users:
+Dual License Notice:
 
-If you use Seklok in a commercial product or business context,
-please consider supporting the project:
-  - GitHub Sponsors: https://github.com/sponsors/kiberos-ai
-  - Star the repo: https://github.com/kiberos-ai/seklok
+This software is available under a dual license:
+  - AGPL-3.0 for open source use (see LICENSE file)
+  - Commercial license for proprietary use
 
-Your support helps maintain and improve this project.
+For commercial licensing inquiries, contact: licensing@kiberos.ai
+Website: https://seklok.com

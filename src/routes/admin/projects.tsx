@@ -12,11 +12,12 @@ import {
   validateMasterKey,
 } from "../../lib/master-keys.js";
 import { Layout } from "../../views/layout.js";
-import { basicAuth } from "../../middleware/basic-auth.js";
+import { requireAuth, type AuthUser } from "../../middleware/session.js";
+import { requireOwnerOrAdmin, getProjectFilter } from "../../middleware/ownership.js";
 
 const app = new Hono();
 
-app.use("*", basicAuth);
+app.use("*", requireAuth);
 
 // --- Helper: parse flash from query string ---
 function flashFromQuery(c: { req: { query: (k: string) => string | undefined } }): { type: string; message: string } | undefined {
@@ -266,14 +267,16 @@ const RotatePostPage: FC<{
 
 // ===== Routes =====
 
-// GET /projects — list all projects
+// GET /projects — list projects (filtered by ownership)
 app.get("/", (c) => {
   const db = getDb();
+  const user = c.get("user") as AuthUser;
+  const { clause, params } = getProjectFilter(user);
   const projects = db
-    .query<Project, []>(
-      "SELECT * FROM projects ORDER BY CASE WHEN parent_id IS NULL THEN id ELSE parent_id END, id"
+    .query<Project, string[]>(
+      `SELECT * FROM projects WHERE 1=1 ${clause} ORDER BY CASE WHEN parent_id IS NULL THEN id ELSE parent_id END, id`
     )
-    .all();
+    .all(...params);
 
   const enriched = projects.map((p) => ({
     ...p,
@@ -297,14 +300,22 @@ app.get("/", (c) => {
 // GET /projects/new — new project form
 app.get("/new", (c) => {
   const db = getDb();
+  const user = c.get("user") as AuthUser;
+  const { clause, params } = getProjectFilter(user);
   const rootProjects = db
-    .query<Project, []>("SELECT * FROM projects WHERE parent_id IS NULL")
-    .all();
+    .query<Project, string[]>(`SELECT * FROM projects WHERE parent_id IS NULL ${clause}`)
+    .all(...params);
   return c.html(<NewProjectPage projects={rootProjects} />);
 });
 
 // POST /projects — create project
 app.post("/", async (c) => {
+  const user = c.get("user") as AuthUser;
+
+  if (!user.emailVerified && user.role !== "admin") {
+    return c.redirect(flashRedirect("/admin/projects/new", "error", "Please verify your email before creating projects"));
+  }
+
   const body = await c.req.parseBody();
   const name = String(body["name"] ?? "").trim();
   const description = String(body["description"] ?? "").trim();
@@ -317,9 +328,9 @@ app.post("/", async (c) => {
 
   const db = getDb();
 
-  db.prepare<void, [string, string, number | null]>(
-    "INSERT INTO projects (name, description, parent_id) VALUES (?, ?, ?)"
-  ).run(name, description, parentId);
+  db.prepare<void, [string, string, number | null, string]>(
+    "INSERT INTO projects (name, description, parent_id, owner_id) VALUES (?, ?, ?, ?)"
+  ).run(name, description, parentId, user.id);
 
   const project = db
     .query<Project, [string]>("SELECT * FROM projects WHERE name = ?")
@@ -342,7 +353,7 @@ app.post("/", async (c) => {
 });
 
 // GET /projects/:id — project detail
-app.get("/:id", (c) => {
+app.get("/:id", requireOwnerOrAdmin("id"), (c) => {
   const projectId = Number(c.req.param("id"));
   const db = getDb();
 
@@ -389,7 +400,7 @@ app.get("/:id", (c) => {
 });
 
 // POST /projects/:id/unseal — store master key
-app.post("/:id/unseal", async (c) => {
+app.post("/:id/unseal", requireOwnerOrAdmin("id"), async (c) => {
   const projectId = Number(c.req.param("id"));
   const body = await c.req.parseBody();
   const masterKey = String(body["master_key"] ?? "").trim();
@@ -410,7 +421,7 @@ app.post("/:id/unseal", async (c) => {
 });
 
 // POST /projects/:id/destroy — delete project + cascaded data
-app.post("/:id/destroy", (c) => {
+app.post("/:id/destroy", requireOwnerOrAdmin("id"), (c) => {
   const projectId = Number(c.req.param("id"));
   const db = getDb();
 
@@ -441,7 +452,7 @@ app.post("/:id/destroy", (c) => {
 });
 
 // GET /projects/:id/rotate — rotation form
-app.get("/:id/rotate", (c) => {
+app.get("/:id/rotate", requireOwnerOrAdmin("id"), (c) => {
   const projectId = Number(c.req.param("id"));
   const db = getDb();
 
@@ -472,7 +483,7 @@ app.get("/:id/rotate", (c) => {
 });
 
 // POST /projects/:id/rotate — perform rotation
-app.post("/:id/rotate", async (c) => {
+app.post("/:id/rotate", requireOwnerOrAdmin("id"), async (c) => {
   const projectId = Number(c.req.param("id"));
   const body = await c.req.parseBody();
   const currentMasterKeyRaw = String(body["current_master_key"] ?? "");
@@ -540,7 +551,7 @@ app.post("/:id/rotate", async (c) => {
 });
 
 // GET /projects/:id/rotate-post — post-rotation page (G-04)
-app.get("/:id/rotate-post", (c) => {
+app.get("/:id/rotate-post", requireOwnerOrAdmin("id"), (c) => {
   const projectId = Number(c.req.param("id"));
   const db = getDb();
 

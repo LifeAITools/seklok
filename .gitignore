@@ -5,3 +5,16 @@ data/
 bun.lockb
 dist/
 .claude/
+
+# Cloud-only (private repo) - prevent accidental commits
+src/cloud/
+src/db/schema-cloud*.ts
+src/db/schema-pg.ts
+docker-compose.cloud*.yml
+.env.cloud*
+drizzle/
+drizzle.config.ts
+tests/cloud.test.ts
+tests/billing.test.ts
+PRPs/
+src/views/enterprise.tsx

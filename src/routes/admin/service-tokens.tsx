@@ -8,6 +8,7 @@ import {
   type Right,
 } from "../../lib/service-tokens.js";
 import { Layout } from "../../views/layout.js";
+import { t, type Locale, detectLocale } from "../../lib/i18n.js";
 import { requireAuth } from "../../middleware/session.js";
 import { requireOwnerOrAdmin } from "../../middleware/ownership.js";
 
@@ -31,51 +32,53 @@ function flashFromQuery(c: { req: { query: (k: string) => string | undefined } }
 // --- Views ---
 
 const TokenListPage: FC<{
+  locale: Locale;
   project: Project;
   tokens: (ServiceToken & { environment_name: string })[];
   newPublicToken?: string;
   flash?: { type: string; message: string };
 }> = (props) => {
+  const { locale } = props;
   return (
-    <Layout title="Service Tokens" flash={props.flash} projectId={props.project.id} projectName={props.project.name}>
-      <h1>Service Tokens for {props.project.name}</h1>
+    <Layout title={t(locale, "tokens.title", { name: props.project.name })} locale={locale} flash={props.flash} projectId={props.project.id} projectName={props.project.name}>
+      <h1>{t(locale, "tokens.title", { name: props.project.name })}</h1>
 
       {props.newPublicToken && (
         <div class="warning">
-          <strong>New service token generated. Back it up and keep it secret.</strong>
+          <strong>{t(locale, "tokens.new_generated")}</strong>
           <div class="copyable">
             <input id="service_token_input" type="password" value={props.newPublicToken} readonly />
-            <button type="button" class="btn btn-sm" onclick="copyToClipboard('service_token_input')">Copy</button>
+            <button type="button" class="btn btn-sm" onclick="copyToClipboard('service_token_input')">{t(locale, "projects.btn_copy")}</button>
           </div>
         </div>
       )}
 
       <div class="controls">
-        <a class="btn" href={`/admin/projects/${props.project.id}/service-tokens/new`}>+ New Token</a>
-        <a class="btn" href={`/admin/projects/${props.project.id}`}>Back to project</a>
+        <a class="btn" href={`/admin/projects/${props.project.id}/service-tokens/new`}>{t(locale, "tokens.new_token")}</a>
+        <a class="btn" href={`/admin/projects/${props.project.id}`}>{t(locale, "tokens.back")}</a>
       </div>
 
       {props.tokens.length > 0 ? (
         <table>
           <thead>
             <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Environment</th>
-              <th>Rights</th>
-              <th>Actions</th>
+              <th>{t(locale, "tokens.col_id")}</th>
+              <th>{t(locale, "tokens.col_name")}</th>
+              <th>{t(locale, "tokens.col_environment")}</th>
+              <th>{t(locale, "tokens.col_rights")}</th>
+              <th>{t(locale, "tokens.col_actions")}</th>
             </tr>
           </thead>
           <tbody>
-            {props.tokens.map((t) => (
+            {props.tokens.map((tk) => (
               <tr>
-                <td>{t.id}</td>
-                <td>{t.friendly_name}</td>
-                <td>{t.environment_name}</td>
-                <td>{t.rights}</td>
+                <td>{tk.id}</td>
+                <td>{tk.friendly_name}</td>
+                <td>{tk.environment_name}</td>
+                <td>{tk.rights}</td>
                 <td>
-                  <form method="post" action={`/admin/projects/${props.project.id}/service-tokens/${t.id}/destroy`} style="display:inline">
-                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure?')">Delete</button>
+                  <form method="post" action={`/admin/projects/${props.project.id}/service-tokens/${tk.id}/destroy`} style="display:inline">
+                    <button type="submit" class="btn btn-sm btn-danger" onclick={`return confirm('${t(locale, "tokens.confirm_delete")}')`}>Delete</button>
                   </form>
                 </td>
               </tr>
@@ -83,29 +86,31 @@ const TokenListPage: FC<{
           </tbody>
         </table>
       ) : (
-        <p>No service tokens for this project.</p>
+        <p>{t(locale, "tokens.no_tokens")}</p>
       )}
     </Layout>
   );
 };
 
 const NewTokenPage: FC<{
+  locale: Locale;
   project: Project;
   environments: Environment[];
   flash?: { type: string; message: string };
 }> = (props) => {
+  const { locale } = props;
   return (
-    <Layout title="New Service Token" flash={props.flash} projectId={props.project.id} projectName={props.project.name}>
-      <h1>New Service Token for {props.project.name}</h1>
+    <Layout title={t(locale, "tokens.new.title", { name: props.project.name })} locale={locale} flash={props.flash} projectId={props.project.id} projectName={props.project.name}>
+      <h1>{t(locale, "tokens.new.title", { name: props.project.name })}</h1>
 
       <form method="post" action={`/admin/projects/${props.project.id}/service-tokens`}>
         <fieldset>
           <div class="form-group">
-            <label for="friendly_name">Friendly Name *</label>
-            <input type="text" name="friendly_name" id="friendly_name" placeholder="Token name" required />
+            <label for="friendly_name">{t(locale, "tokens.new.name_label")}</label>
+            <input type="text" name="friendly_name" id="friendly_name" placeholder={t(locale, "tokens.new.name_placeholder")} required />
           </div>
           <div class="form-group">
-            <label for="environment_id">Environment *</label>
+            <label for="environment_id">{t(locale, "tokens.new.env_label")}</label>
             <select name="environment_id" id="environment_id">
               {props.environments.map((e) => (
                 <option value={String(e.id)}>{e.name}</option>
@@ -113,16 +118,16 @@ const NewTokenPage: FC<{
             </select>
           </div>
           <div class="form-group">
-            <label for="rights">Rights *</label>
+            <label for="rights">{t(locale, "tokens.new.rights_label")}</label>
             <select name="rights" id="rights" multiple>
-              <option value="read" selected>Read</option>
-              <option value="write">Write</option>
-              <option value="admin">Admin</option>
+              <option value="read" selected>{t(locale, "tokens.new.right_read")}</option>
+              <option value="write">{t(locale, "tokens.new.right_write")}</option>
+              <option value="admin">{t(locale, "tokens.new.right_admin")}</option>
             </select>
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Create</button>
-            <a href={`/admin/projects/${props.project.id}/service-tokens`} class="btn">Cancel</a>
+            <button type="submit" class="btn btn-primary">{t(locale, "tokens.new.submit")}</button>
+            <a href={`/admin/projects/${props.project.id}/service-tokens`} class="btn">{t(locale, "tokens.new.cancel")}</a>
           </div>
         </fieldset>
       </form>
@@ -134,6 +139,7 @@ const NewTokenPage: FC<{
 
 // GET /projects/:pid/service-tokens
 app.get("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("pid"));
   const db = getDb();
 
@@ -141,7 +147,7 @@ app.get("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), (c) => {
     .query<Project, [number]>("SELECT * FROM projects WHERE id = ?")
     .get(projectId);
   if (!project) {
-    return c.redirect(flashRedirect("/admin/projects", "error", "Project not found"));
+    return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_not_found")));
   }
 
   const tokens = db
@@ -159,6 +165,7 @@ app.get("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), (c) => {
 
   return c.html(
     <TokenListPage
+      locale={locale}
       project={project}
       tokens={tokens}
       newPublicToken={newPublicToken}
@@ -169,6 +176,7 @@ app.get("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), (c) => {
 
 // GET /projects/:pid/service-tokens/new
 app.get("/projects/:pid/service-tokens/new", requireOwnerOrAdmin("pid"), (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("pid"));
   const db = getDb();
 
@@ -176,22 +184,23 @@ app.get("/projects/:pid/service-tokens/new", requireOwnerOrAdmin("pid"), (c) => 
     .query<Project, [number]>("SELECT * FROM projects WHERE id = ?")
     .get(projectId);
   if (!project) {
-    return c.redirect(flashRedirect("/admin/projects", "error", "Project not found"));
+    return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_not_found")));
   }
 
   if (isProjectSealed(projectId)) {
-    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", "Unseal the project first"));
+    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", t(locale, "flash.unseal_first")));
   }
 
   const environments = db.query<Environment, []>("SELECT * FROM environments").all();
 
   return c.html(
-    <NewTokenPage project={project} environments={environments} />
+    <NewTokenPage locale={locale} project={project} environments={environments} />
   );
 });
 
 // POST /projects/:pid/service-tokens — create token
 app.post("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), async (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("pid"));
   const db = getDb();
 
@@ -199,12 +208,12 @@ app.post("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), async (c) 
     .query<Project, [number]>("SELECT * FROM projects WHERE id = ?")
     .get(projectId);
   if (!project) {
-    return c.redirect(flashRedirect("/admin/projects", "error", "Project not found"));
+    return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_not_found")));
   }
 
   const masterKey = getMasterKey(projectId);
   if (!masterKey) {
-    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", "Unseal the project first"));
+    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", t(locale, "flash.unseal_first")));
   }
 
   const body = await c.req.parseBody();
@@ -223,26 +232,27 @@ app.post("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), async (c) 
   }
 
   if (!friendlyName || isNaN(envId)) {
-    return c.redirect(flashRedirect(`/admin/projects/${projectId}/service-tokens/new`, "error", "Name and environment are required"));
+    return c.redirect(flashRedirect(`/admin/projects/${projectId}/service-tokens/new`, "error", t(locale, "tokens.err_required")));
   }
 
   const { record: _record, generatedToken } = createServiceToken(projectId, envId, friendlyName, rights);
   const publicToken = encodePublicToken(masterKey, generatedToken);
 
   return c.redirect(
-    `/admin/projects/${projectId}/service-tokens?new_token=${encodeURIComponent(publicToken)}&flash_type=success&flash_msg=${encodeURIComponent("Service token created successfully")}`
+    `/admin/projects/${projectId}/service-tokens?new_token=${encodeURIComponent(publicToken)}&flash_type=success&flash_msg=${encodeURIComponent(t(locale, "tokens.flash_created"))}`
   );
 });
 
 // POST /projects/:pid/service-tokens/:tid/destroy — revoke
 app.post("/projects/:pid/service-tokens/:tid/destroy", requireOwnerOrAdmin("pid"), (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("pid"));
   const tokenId = Number(c.req.param("tid"));
   const db = getDb();
 
   db.prepare<void, [number]>("DELETE FROM service_tokens WHERE id = ?").run(tokenId);
 
-  return c.redirect(flashRedirect(`/admin/projects/${projectId}/service-tokens`, "success", "Service token deleted"));
+  return c.redirect(flashRedirect(`/admin/projects/${projectId}/service-tokens`, "success", t(locale, "tokens.flash_deleted")));
 });
 
 export default app;

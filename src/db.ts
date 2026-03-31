@@ -118,7 +118,8 @@ export function initDb(environments: string[]): void {
       parent_id INTEGER REFERENCES projects(id),
       name TEXT UNIQUE NOT NULL,
       description TEXT DEFAULT '',
-      owner_id TEXT REFERENCES users(id)
+      owner_id TEXT REFERENCES users(id),
+      master_key_hash TEXT
     );
 
     CREATE TABLE IF NOT EXISTS environments (
@@ -166,6 +167,9 @@ export function initDb(environments: string[]): void {
   const cols = database.prepare("PRAGMA table_info(projects)").all() as { name: string }[];
   if (!cols.some((col) => col.name === "owner_id")) {
     database.exec("ALTER TABLE projects ADD COLUMN owner_id TEXT REFERENCES users(id)");
+  }
+  if (!cols.some((col) => col.name === "master_key_hash")) {
+    database.exec("ALTER TABLE projects ADD COLUMN master_key_hash TEXT");
   }
 
   const insert = database.prepare(

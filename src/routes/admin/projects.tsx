@@ -12,6 +12,7 @@ import {
   validateMasterKey,
 } from "../../lib/master-keys.js";
 import { Layout } from "../../views/layout.js";
+import { t, type Locale, detectLocale } from "../../lib/i18n.js";
 import { requireAuth, type AuthUser } from "../../middleware/session.js";
 import { requireOwnerOrAdmin, getProjectFilter } from "../../middleware/ownership.js";
 
@@ -34,39 +35,41 @@ function flashRedirect(path: string, type: string, message: string): string {
 // ===== Views =====
 
 const ProjectListPage: FC<{
+  locale: Locale;
   projects: (Project & { sealed: boolean })[];
   flash?: { type: string; message: string };
   newMasterKey?: string;
   newProjectName?: string;
 }> = (props) => {
+  const { locale } = props;
   return (
-    <Layout title="Projects" flash={props.flash}>
-      <h1>Projects ({props.projects.length})</h1>
+    <Layout title={t(locale, "projects.title", { count: props.projects.length })} locale={locale} flash={props.flash}>
+      <h1>{t(locale, "projects.title", { count: props.projects.length })}</h1>
 
       {props.newMasterKey && (
         <div class="warning">
           <p>
-            <strong>New master key generated for project {props.newProjectName}.</strong><br />
-            Back it up and keep it secret. Alternatively you can use your own master key/passphrase.
+            <strong>{t(locale, "projects.master_key_generated", { name: props.newProjectName ?? "" })}</strong><br />
+            {t(locale, "projects.master_key_backup")}
           </p>
           <div class="copyable">
             <input id="master_key_input" type="password" value={props.newMasterKey} readonly />
-            <button type="button" class="btn btn-sm" onclick="copyToClipboard('master_key_input')">Copy</button>
+            <button type="button" class="btn btn-sm" onclick="copyToClipboard('master_key_input')">{t(locale, "projects.btn_copy")}</button>
           </div>
         </div>
       )}
 
       <div class="controls">
-        <a class="btn" href="/admin/projects/new">+ New Project</a>
+        <a class="btn" href="/admin/projects/new">{t(locale, "projects.new_project")}</a>
       </div>
 
       <table>
         <thead>
           <tr>
-            <th>#</th>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Actions</th>
+            <th>{t(locale, "projects.col_id")}</th>
+            <th>{t(locale, "projects.col_name")}</th>
+            <th>{t(locale, "projects.col_status")}</th>
+            <th>{t(locale, "projects.col_actions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -77,12 +80,12 @@ const ProjectListPage: FC<{
                 {p.parent_id ? <span>&nbsp;&nbsp;&nbsp;&nbsp;</span> : null}
                 {p.name}
               </td>
-              <td>{p.sealed ? "sealed" : <strong>[unsealed]</strong>}</td>
+              <td>{p.sealed ? t(locale, "projects.status_sealed") : <strong>{t(locale, "projects.status_unsealed")}</strong>}</td>
               <td>
                 <div class="inline-actions">
-                  <a class="btn btn-sm" href={`/admin/projects/${p.id}`}>View</a>
+                  <a class="btn btn-sm" href={`/admin/projects/${p.id}`}>{t(locale, "projects.btn_view")}</a>
                   <form method="post" action={`/admin/projects/${p.id}/destroy`} style="display:inline">
-                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Are you sure?')">Delete</button>
+                    <button type="submit" class="btn btn-sm btn-danger" onclick={`return confirm('${t(locale, "projects.confirm_delete")}')`}>{t(locale, "projects.btn_delete")}</button>
                   </form>
                 </div>
               </td>
@@ -95,34 +98,36 @@ const ProjectListPage: FC<{
 };
 
 const NewProjectPage: FC<{
+  locale: Locale;
   projects: Project[];
   flash?: { type: string; message: string };
 }> = (props) => {
+  const { locale } = props;
   return (
-    <Layout title="New Project" flash={props.flash}>
-      <h1>New Project</h1>
+    <Layout title={t(locale, "projects.new.title")} locale={locale} flash={props.flash}>
+      <h1>{t(locale, "projects.new.title")}</h1>
       <form method="post" action="/admin/projects">
         <fieldset>
           <div class="form-group">
-            <label for="name">Name *</label>
-            <input type="text" name="name" id="name" maxlength={50} placeholder="Project name" required />
+            <label for="name">{t(locale, "projects.new.name_label")}</label>
+            <input type="text" name="name" id="name" maxlength={50} placeholder={t(locale, "projects.new.name_placeholder")} required />
           </div>
           <div class="form-group">
-            <label for="description">Description</label>
-            <textarea name="description" id="description" rows={3} placeholder="Description"></textarea>
+            <label for="description">{t(locale, "projects.new.desc_label")}</label>
+            <textarea name="description" id="description" rows={3} placeholder={t(locale, "projects.new.desc_label")}></textarea>
           </div>
           <div class="form-group">
-            <label for="parent_id">Parent Project</label>
+            <label for="parent_id">{t(locale, "projects.new.parent_label")}</label>
             <select name="parent_id" id="parent_id">
-              <option value="">-- None (root project) --</option>
+              <option value="">{t(locale, "projects.new.parent_none")}</option>
               {props.projects.map((p) => (
                 <option value={String(p.id)}>{p.name}</option>
               ))}
             </select>
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Create</button>
-            <a href="/admin/projects" class="btn">Cancel</a>
+            <button type="submit" class="btn btn-primary">{t(locale, "projects.new.submit")}</button>
+            <a href="/admin/projects" class="btn">{t(locale, "projects.new.cancel")}</a>
           </div>
         </fieldset>
       </form>
@@ -131,26 +136,28 @@ const NewProjectPage: FC<{
 };
 
 const ProjectDetailPage: FC<{
+  locale: Locale;
   project: Project;
   environments: (Environment & { secretCount: number })[];
   sealed: boolean;
   flash?: { type: string; message: string };
 }> = (props) => {
+  const { locale } = props;
   return (
-    <Layout title={props.project.name} flash={props.flash} projectId={props.project.id} projectName={props.project.name}>
-      <h1>{props.project.name} Project</h1>
+    <Layout title={props.project.name} locale={locale} flash={props.flash} projectId={props.project.id} projectName={props.project.name}>
+      <h1>{t(locale, "projects.detail.title", { name: props.project.name })}</h1>
 
       {props.sealed && (
         <div>
-          <p>Project master key is not currently set. Fill it below to keep it stored temporarily in memory.</p>
+          <p>{t(locale, "projects.detail.sealed_msg")}</p>
           <form method="post" action={`/admin/projects/${props.project.id}/unseal`}>
             <fieldset>
               <div class="form-group">
-                <label for="master_key">Project master key/passphrase *</label>
-                <input type="password" name="master_key" id="master_key" placeholder="Master key" />
+                <label for="master_key">{t(locale, "projects.detail.key_label")}</label>
+                <input type="password" name="master_key" id="master_key" placeholder={t(locale, "projects.detail.key_placeholder")} />
               </div>
               <div class="form-actions">
-                <button type="submit" class="btn btn-primary">Store (unseal)</button>
+                <button type="submit" class="btn btn-primary">{t(locale, "projects.detail.unseal")}</button>
               </div>
             </fieldset>
           </form>
@@ -159,18 +166,18 @@ const ProjectDetailPage: FC<{
 
       <hr />
       <div class="controls">
-        <a class="btn" href={`/admin/projects/${props.project.id}/rotate`}>Rotate Master Key</a>
-        <a class="btn" href={`/admin/projects/${props.project.id}/service-tokens`}>Service Tokens</a>
+        <a class="btn" href={`/admin/projects/${props.project.id}/rotate`}>{t(locale, "projects.detail.rotate_key")}</a>
+        <a class="btn" href={`/admin/projects/${props.project.id}/service-tokens`}>{t(locale, "projects.detail.service_tokens")}</a>
       </div>
       <hr />
 
-      <h3>Environments</h3>
+      <h3>{t(locale, "projects.detail.environments")}</h3>
       <div class="env-grid">
         {props.environments.map((env) => (
           <div class="env-card">
             <h3>{env.name}</h3>
             <a href={`/admin/projects/${props.project.id}/environments/${env.id}/secrets`}>
-              Secrets ({env.secretCount})
+              {t(props.locale, "secrets.count_link", { count: env.secretCount })}
             </a>
           </div>
         ))}
@@ -180,34 +187,36 @@ const ProjectDetailPage: FC<{
 };
 
 const RotatePage: FC<{
+  locale: Locale;
   project: Project;
   currentMasterKey: string;
   newMasterKey: string;
   flash?: { type: string; message: string };
 }> = (props) => {
+  const { locale } = props;
   return (
-    <Layout title="Rotate Master Key" flash={props.flash} projectId={props.project.id} projectName={props.project.name}>
-      <h1>Rotate Master Key for project {props.project.name}</h1>
+    <Layout title={t(locale, "projects.rotate.title", { name: props.project.name })} locale={locale} flash={props.flash} projectId={props.project.id} projectName={props.project.name}>
+      <h1>{t(locale, "projects.rotate.title", { name: props.project.name })}</h1>
 
       <div class="warning">
-        <strong>Warning!</strong> This will re-encrypt all secrets with the new master key.<br />
-        Service tokens will be invalidated and need to be re-created.
+        <strong>{t(locale, "projects.rotate.warning_title")}</strong> {t(locale, "projects.rotate.warning_text")}<br />
+        {t(locale, "projects.rotate.warning_tokens")}
       </div>
 
       <form method="post" action={`/admin/projects/${props.project.id}/rotate`}>
         <fieldset>
           <div class="form-group">
-            <label for="current_master_key">Current Master Key *</label>
+            <label for="current_master_key">{t(locale, "projects.rotate.current_key")}</label>
             <input type="password" name="current_master_key" id="current_master_key" value={props.currentMasterKey} />
           </div>
           <div class="form-group">
-            <label for="new_master_key">New Master Key *</label>
+            <label for="new_master_key">{t(locale, "projects.rotate.new_key")}</label>
             <input type="password" name="new_master_key" id="new_master_key" value={props.newMasterKey} />
-            <button type="button" class="btn btn-sm" onclick="copyToClipboard('new_master_key')">Copy</button>
+            <button type="button" class="btn btn-sm" onclick="copyToClipboard('new_master_key')">{t(locale, "projects.btn_copy")}</button>
           </div>
           <div class="form-actions">
-            <button type="submit" class="btn btn-primary">Rotate</button>
-            <a href={`/admin/projects/${props.project.id}`} class="btn">Cancel</a>
+            <button type="submit" class="btn btn-primary">{t(locale, "projects.rotate.submit")}</button>
+            <a href={`/admin/projects/${props.project.id}`} class="btn">{t(locale, "projects.rotate.cancel")}</a>
           </div>
         </fieldset>
       </form>
@@ -216,37 +225,39 @@ const RotatePage: FC<{
 };
 
 const RotatePostPage: FC<{
+  locale: Locale;
   project: Project;
   serviceTokens: (ServiceToken & { environment_name?: string })[];
 }> = (props) => {
+  const { locale } = props;
   return (
-    <Layout title="Rotation Complete" projectId={props.project.id} projectName={props.project.name}
-            flash={{ type: "success", message: "Master key rotated successfully. All secrets re-encrypted." }}>
-      <h1>Rotation Complete for {props.project.name}</h1>
+    <Layout title={t(locale, "projects.rotate_post.title", { name: props.project.name })} locale={locale} projectId={props.project.id} projectName={props.project.name}
+            flash={{ type: "success", message: t(locale, "projects.rotate_post.flash") }}>
+      <h1>{t(locale, "projects.rotate_post.title", { name: props.project.name })}</h1>
 
       {props.serviceTokens.length > 0 ? (
         <div>
           <div class="warning">
-            <strong>These tokens encode the old master key. They must be regenerated.</strong>
+            <strong>{t(locale, "projects.rotate_post.warning")}</strong>
           </div>
           <table>
             <thead>
               <tr>
-                <th>#</th>
-                <th>Name</th>
-                <th>Environment</th>
-                <th>Actions</th>
+                <th>{t(locale, "projects.col_id")}</th>
+                <th>{t(locale, "projects.col_name")}</th>
+                <th>{t(locale, "projects.rotate_post.col_environment")}</th>
+                <th>{t(locale, "projects.col_actions")}</th>
               </tr>
             </thead>
             <tbody>
-              {props.serviceTokens.map((t) => (
+              {props.serviceTokens.map((tk) => (
                 <tr>
-                  <td>{t.id}</td>
-                  <td>{t.friendly_name}</td>
-                  <td>{t.environment_name ?? String(t.environment_id)}</td>
+                  <td>{tk.id}</td>
+                  <td>{tk.friendly_name}</td>
+                  <td>{tk.environment_name ?? String(tk.environment_id)}</td>
                   <td>
-                    <form method="post" action={`/admin/projects/${props.project.id}/service-tokens/${t.id}/destroy`} style="display:inline">
-                      <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this token?')">Delete</button>
+                    <form method="post" action={`/admin/projects/${props.project.id}/service-tokens/${tk.id}/destroy`} style="display:inline">
+                      <button type="submit" class="btn btn-sm btn-danger" onclick={`return confirm('${t(locale, "projects.rotate_post.confirm_delete")}')`}>{t(locale, "projects.btn_delete")}</button>
                     </form>
                   </td>
                 </tr>
@@ -255,11 +266,11 @@ const RotatePostPage: FC<{
           </table>
         </div>
       ) : (
-        <p>No service tokens were affected.</p>
+        <p>{t(locale, "projects.rotate_post.no_tokens")}</p>
       )}
 
       <div style="margin-top: 16px;">
-        <a class="btn" href={`/admin/projects/${props.project.id}`}>Back to project</a>
+        <a class="btn" href={`/admin/projects/${props.project.id}`}>{t(locale, "projects.rotate_post.back")}</a>
       </div>
     </Layout>
   );
@@ -269,6 +280,7 @@ const RotatePostPage: FC<{
 
 // GET /projects — list projects (filtered by ownership)
 app.get("/", (c) => {
+  const locale = detectLocale(c);
   const db = getDb();
   const user = c.get("user") as AuthUser;
   const { clause, params } = getProjectFilter(user);
@@ -289,6 +301,7 @@ app.get("/", (c) => {
 
   return c.html(
     <ProjectListPage
+      locale={locale}
       projects={enriched}
       flash={flash}
       newMasterKey={newMasterKey}
@@ -299,21 +312,24 @@ app.get("/", (c) => {
 
 // GET /projects/new — new project form
 app.get("/new", (c) => {
+  const locale = detectLocale(c);
   const db = getDb();
   const user = c.get("user") as AuthUser;
   const { clause, params } = getProjectFilter(user);
   const rootProjects = db
     .query<Project, string[]>(`SELECT * FROM projects WHERE parent_id IS NULL ${clause}`)
     .all(...params);
-  return c.html(<NewProjectPage projects={rootProjects} />);
+  const flash = flashFromQuery(c);
+  return c.html(<NewProjectPage locale={locale} projects={rootProjects} flash={flash} />);
 });
 
 // POST /projects — create project
 app.post("/", async (c) => {
+  const locale = detectLocale(c);
   const user = c.get("user") as AuthUser;
 
   if (!user.emailVerified && user.role !== "admin") {
-    return c.redirect(flashRedirect("/admin/projects/new", "error", "Please verify your email before creating projects"));
+    return c.redirect(flashRedirect("/admin/projects/new", "error", t(locale, "flash.verify_email")));
   }
 
   const body = await c.req.parseBody();
@@ -337,23 +353,27 @@ app.post("/", async (c) => {
     .get(name);
 
   if (!project) {
-    return c.redirect(flashRedirect("/admin/projects", "error", "Failed to create project"));
+    return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_create_failed")));
   }
 
   // Generate master key only for root projects
   if (!parentId) {
     const masterKey = generateKeyB64();
     setMasterKey(project.id, masterKey);
+    const hasher = new Bun.CryptoHasher("sha256");
+    hasher.update(masterKey);
+    db.prepare("UPDATE projects SET master_key_hash = ? WHERE id = ?").run(hasher.digest("hex"), project.id);
     return c.redirect(
-      `/admin/projects?new_master_key=${encodeURIComponent(masterKey)}&new_project_name=${encodeURIComponent(name)}&flash_type=success&flash_msg=${encodeURIComponent("Project created. New master key generated.")}`
+      `/admin/projects?new_master_key=${encodeURIComponent(masterKey)}&new_project_name=${encodeURIComponent(name)}&flash_type=success&flash_msg=${encodeURIComponent(t(locale, "flash.project_created_key"))}`
     );
   }
 
-  return c.redirect(flashRedirect("/admin/projects", "success", `Project "${name}" created.`));
+  return c.redirect(flashRedirect("/admin/projects", "success", t(locale, "flash.project_created", { name })));
 });
 
 // GET /projects/:id — project detail
 app.get("/:id", requireOwnerOrAdmin("id"), (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("id"));
   const db = getDb();
 
@@ -362,7 +382,7 @@ app.get("/:id", requireOwnerOrAdmin("id"), (c) => {
     .get(projectId);
 
   if (!project) {
-    return c.redirect(flashRedirect("/admin/projects", "error", "Project not found"));
+    return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_not_found")));
   }
 
   const environments = db.query<Environment, []>("SELECT * FROM environments").all();
@@ -391,6 +411,7 @@ app.get("/:id", requireOwnerOrAdmin("id"), (c) => {
 
   return c.html(
     <ProjectDetailPage
+      locale={locale}
       project={project}
       environments={enrichedEnvs}
       sealed={sealed}
@@ -401,27 +422,29 @@ app.get("/:id", requireOwnerOrAdmin("id"), (c) => {
 
 // POST /projects/:id/unseal — store master key
 app.post("/:id/unseal", requireOwnerOrAdmin("id"), async (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("id"));
   const body = await c.req.parseBody();
   const masterKey = String(body["master_key"] ?? "").trim();
 
   if (!masterKey) {
-    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", "Master key is required"));
+    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", t(locale, "flash.key_required")));
   }
 
   const preparedKey = prepareMasterKey(masterKey);
   const valid = validateMasterKey(projectId, preparedKey);
 
   if (!valid) {
-    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", "Invalid master key"));
+    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", t(locale, "flash.invalid_key")));
   }
 
   setMasterKey(projectId, preparedKey);
-  return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "success", "Master key has been set successfully"));
+  return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "success", t(locale, "flash.key_set")));
 });
 
 // POST /projects/:id/destroy — delete project + cascaded data
 app.post("/:id/destroy", requireOwnerOrAdmin("id"), (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("id"));
   const db = getDb();
 
@@ -430,7 +453,7 @@ app.post("/:id/destroy", requireOwnerOrAdmin("id"), (c) => {
     .get(projectId);
 
   if (!project) {
-    return c.redirect(flashRedirect("/admin/projects", "error", "Project not found"));
+    return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_not_found")));
   }
 
   // Collect IDs: this project + sub-projects
@@ -448,11 +471,12 @@ app.post("/:id/destroy", requireOwnerOrAdmin("id"), (c) => {
     deleteMasterKey(pid);
   }
 
-  return c.redirect(flashRedirect("/admin/projects", "success", "Project deleted successfully"));
+  return c.redirect(flashRedirect("/admin/projects", "success", t(locale, "flash.project_deleted")));
 });
 
 // GET /projects/:id/rotate — rotation form
 app.get("/:id/rotate", requireOwnerOrAdmin("id"), (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("id"));
   const db = getDb();
 
@@ -461,12 +485,12 @@ app.get("/:id/rotate", requireOwnerOrAdmin("id"), (c) => {
     .get(projectId);
 
   if (!project) {
-    return c.redirect(flashRedirect("/admin/projects", "error", "Project not found"));
+    return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_not_found")));
   }
 
   const currentMasterKey = getMasterKey(projectId);
   if (!currentMasterKey) {
-    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", "Unseal the project first"));
+    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", t(locale, "flash.unseal_first")));
   }
 
   const newMasterKey = generateKeyB64();
@@ -474,6 +498,7 @@ app.get("/:id/rotate", requireOwnerOrAdmin("id"), (c) => {
 
   return c.html(
     <RotatePage
+      locale={locale}
       project={project}
       currentMasterKey={currentMasterKey}
       newMasterKey={newMasterKey}
@@ -484,13 +509,14 @@ app.get("/:id/rotate", requireOwnerOrAdmin("id"), (c) => {
 
 // POST /projects/:id/rotate — perform rotation
 app.post("/:id/rotate", requireOwnerOrAdmin("id"), async (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("id"));
   const body = await c.req.parseBody();
   const currentMasterKeyRaw = String(body["current_master_key"] ?? "");
   const newMasterKeyRaw = String(body["new_master_key"] ?? "");
 
   if (!currentMasterKeyRaw || !newMasterKeyRaw) {
-    return c.redirect(flashRedirect(`/admin/projects/${projectId}/rotate`, "error", "Both keys are required"));
+    return c.redirect(flashRedirect(`/admin/projects/${projectId}/rotate`, "error", t(locale, "flash.keys_required")));
   }
 
   const newMasterKey = prepareMasterKey(newMasterKeyRaw);
@@ -501,7 +527,7 @@ app.post("/:id/rotate", requireOwnerOrAdmin("id"), async (c) => {
     .get(projectId);
 
   if (!project) {
-    return c.redirect(flashRedirect("/admin/projects", "error", "Project not found"));
+    return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_not_found")));
   }
 
   // Get all secrets for project (+ parent)
@@ -546,12 +572,16 @@ app.post("/:id/rotate", requireOwnerOrAdmin("id"), async (c) => {
 
   deleteMasterKey(projectId);
   setMasterKey(projectId, newMasterKey);
+  const rotateHasher = new Bun.CryptoHasher("sha256");
+  rotateHasher.update(newMasterKey);
+  db.prepare("UPDATE projects SET master_key_hash = ? WHERE id = ?").run(rotateHasher.digest("hex"), projectId);
 
   return c.redirect(`/admin/projects/${projectId}/rotate-post`);
 });
 
 // GET /projects/:id/rotate-post — post-rotation page (G-04)
 app.get("/:id/rotate-post", requireOwnerOrAdmin("id"), (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("id"));
   const db = getDb();
 
@@ -560,7 +590,7 @@ app.get("/:id/rotate-post", requireOwnerOrAdmin("id"), (c) => {
     .get(projectId);
 
   if (!project) {
-    return c.redirect(flashRedirect("/admin/projects", "error", "Project not found"));
+    return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_not_found")));
   }
 
   const projectIds = [projectId];
@@ -579,7 +609,7 @@ app.get("/:id/rotate-post", requireOwnerOrAdmin("id"), (c) => {
     .all(...params);
 
   return c.html(
-    <RotatePostPage project={project} serviceTokens={tokens} />
+    <RotatePostPage locale={locale} project={project} serviceTokens={tokens} />
   );
 });
 

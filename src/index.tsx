@@ -23,22 +23,45 @@ import adminProjectsRoutes from "./routes/admin/projects.js";
 import adminSecretsRoutes from "./routes/admin/secrets.js";
 import adminServiceTokensRoutes from "./routes/admin/service-tokens.js";
 
+// i18n
+import { detectLocale, t, type Locale } from "./lib/i18n.js";
+
 // Middleware
-import { getCookie } from "hono/cookie";
+import { getCookie, setCookie } from "hono/cookie";
 import { getDb } from "./db.js";
 import type { MiddlewareHandler } from "hono";
 import type { AuthUser } from "./middleware/session.js";
 
 // Views
 import { HomePage } from "./views/home.js";
+import { Layout } from "./views/layout.js";
+
+declare module "hono" {
+  interface ContextVariableMap {
+    locale: Locale;
+  }
+}
 
 const app = new Hono();
+
+// Locale detection middleware
+app.use("*", async (c, next) => {
+  const langParam = c.req.query("lang");
+  if (langParam && ["en", "ru"].includes(langParam)) {
+    setCookie(c, "seklok_lang", langParam, { path: "/", maxAge: 365 * 24 * 3600 });
+    c.set("locale", langParam as Locale);
+  } else {
+    c.set("locale", detectLocale(c));
+  }
+  return next();
+});
 
 // Global error handler - CN-01: NEVER serialize decrypted secret values
 app.onError((err, c) => {
   console.error(`[seklok] Error: ${err.message}`);
+  const locale = (c.get("locale") as Locale) ?? "en";
   if (c.req.path.startsWith("/api/")) {
-    return c.json({ error: "Internal Server Error", message: err.message }, 500);
+    return c.json({ error: t(locale, "error.internal"), message: err.message }, 500);
   }
   const referer = c.req.header("referer") || "/admin/projects";
   return c.redirect(referer);
@@ -113,13 +136,17 @@ const sessionOrBasicAuth: MiddlewareHandler = async (c, next) => {
   if (c.req.header("Accept")?.includes("text/html")) {
     return c.redirect("/auth/login");
   }
-  return c.newResponse("Unauthorized", 401, {
+  const locale = (c.get("locale") as Locale) ?? "en";
+  return c.newResponse(t(locale, "error.unauthorized"), 401, {
     "WWW-Authenticate": 'Basic realm="Login Required"',
   });
 };
 
 // Home page
-app.get("/", (c) => c.html(<HomePage />));
+app.get("/", (c) => {
+  const locale = c.get("locale") as Locale;
+  return c.html(<HomePage locale={locale} />);
+});
 
 // API routes (service token auth applied inside each route file)
 app.route("/api/v1/status", statusRoutes);
@@ -145,6 +172,23 @@ app.use("/admin/*", sessionOrBasicAuth);
 app.route("/admin/projects", adminProjectsRoutes);
 app.route("/admin", adminSecretsRoutes);
 app.route("/admin", adminServiceTokensRoutes);
+
+// 404 handler
+app.notFound((c) => {
+  const locale = (c.get("locale") as Locale) ?? "en";
+  if (c.req.path.startsWith("/api/")) {
+    return c.json({ error: t(locale, "error.not_found") }, 404);
+  }
+  return c.html(
+    <Layout title={t(locale, "error.not_found_title")} locale={locale}>
+      <h1>{t(locale, "error.not_found_title")}</h1>
+      <p style="margin-top: 12px;">
+        <a href="/" class="btn">{t(locale, "error.go_home")}</a>
+      </p>
+    </Layout>,
+    404
+  );
+});
 
 // Initialize database
 initDb(config.availableEnvironments);

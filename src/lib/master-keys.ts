@@ -61,6 +61,19 @@ export function validateMasterKey(
   masterKey: string
 ): boolean {
   const db = getDb();
+
+  const project = db
+    .query<{ master_key_hash: string | null }, [number]>(
+      "SELECT master_key_hash FROM projects WHERE id = ?"
+    )
+    .get(projectId);
+
+  if (project?.master_key_hash) {
+    const hasher = new Bun.CryptoHasher("sha256");
+    hasher.update(masterKey);
+    return hasher.digest("hex") === project.master_key_hash;
+  }
+
   const row = db
     .query<SecretValueHistory, [number]>(
       `SELECT svh.* FROM secret_value_histories svh
@@ -71,7 +84,7 @@ export function validateMasterKey(
     )
     .get(projectId);
 
-  if (!row) return true;
+  if (!row) return false;
 
   try {
     decrypt(masterKey, row.encrypted_value, row.iv_value);

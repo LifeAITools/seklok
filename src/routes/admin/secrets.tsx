@@ -5,6 +5,7 @@ import { getDb, type Project, type Environment, type Secret, type SecretValueHis
 import { encrypt, decrypt } from "../../lib/encryption.js";
 import { getMasterKey, isProjectSealed } from "../../lib/master-keys.js";
 import { Layout } from "../../views/layout.js";
+import { t, type Locale, detectLocale } from "../../lib/i18n.js";
 import { requireAuth } from "../../middleware/session.js";
 import { requireOwnerOrAdmin } from "../../middleware/ownership.js";
 
@@ -88,6 +89,7 @@ interface SecretRow {
 }
 
 const SecretsPage: FC<{
+  locale: Locale;
   project: Project;
   environment: Environment;
   secrets: SecretRow[];
@@ -95,27 +97,29 @@ const SecretsPage: FC<{
   withDecryption: boolean;
   flash?: { type: string; message: string };
 }> = (props) => {
+  const { locale } = props;
   const baseUrl = `/admin/projects/${props.project.id}/environments/${props.environment.id}/secrets`;
 
   return (
     <Layout
-      title={`Secrets - ${props.environment.name}`}
+      title={t(locale, "secrets.title", { project: props.project.name, environment: props.environment.name })}
+      locale={locale}
       flash={props.flash}
       projectId={props.project.id}
       projectName={props.project.name}
     >
-      <h1>Secrets for {props.project.name} / {props.environment.name}</h1>
+      <h1>{t(locale, "secrets.title", { project: props.project.name, environment: props.environment.name })}</h1>
 
       {props.missingSecrets.length > 0 && (
         <div class="warning">
-          <strong>Missing secrets</strong> (exist in other environments but not here):
+          <strong>{t(locale, "secrets.missing_title")}</strong> {t(locale, "secrets.missing_text")}
           <ul>
             {props.missingSecrets.map((ms) => (
               <li>
                 {ms.secretName} (from: {ms.envNames.join(", ")})
                 {" "}
                 <button type="button" class="btn btn-sm"
-                  onclick={`addSecretRow('${ms.secretName}', '')`}>Add</button>
+                  onclick={`addSecretRow('${ms.secretName}', '')`}>{t(locale, "secrets.btn_quick_add")}</button>
               </li>
             ))}
           </ul>
@@ -123,10 +127,10 @@ const SecretsPage: FC<{
       )}
 
       <div class="controls">
-        <button type="button" class="btn" onclick="addSecretRow('', '')">+ Add Secret</button>
+        <button type="button" class="btn" onclick="addSecretRow('', '')">{t(locale, "secrets.btn_add")}</button>
         {!props.withDecryption
-          ? <a class="btn" href={`${baseUrl}?decrypt=true`}>Decrypt Secrets</a>
-          : <a class="btn" href={baseUrl}>Hide Values</a>
+          ? <a class="btn" href={`${baseUrl}?decrypt=true`}>{t(locale, "secrets.btn_decrypt")}</a>
+          : <a class="btn" href={baseUrl}>{t(locale, "secrets.btn_hide")}</a>
         }
       </div>
 
@@ -136,10 +140,10 @@ const SecretsPage: FC<{
           {props.secrets.map((s) => (
             <div class="secret-row" id={`secret-row-${s.id}`}>
               <div class="name-col">
-                <input type="text" name={`secrets[${s.id}][name]`} value={s.name} placeholder="SECRET_NAME" required />
+                <input type="text" name={`secrets[${s.id}][name]`} value={s.name} placeholder={t(locale, "secrets.name_placeholder")} required />
               </div>
               <div class="value-col">
-                <input type="text" name={`secrets[${s.id}][value]`} value={s.value} placeholder="value" />
+                <input type="text" name={`secrets[${s.id}][value]`} value={s.value} placeholder={t(locale, "secrets.value_placeholder")} />
               </div>
               <div class="actions-col">
                 <button type="button" class="btn btn-sm btn-danger"
@@ -149,8 +153,8 @@ const SecretsPage: FC<{
           ))}
         </div>
         <div class="form-actions">
-          <button type="submit" class="btn btn-primary">Save</button>
-          <a href={`/admin/projects/${props.project.id}`} class="btn">Back to project</a>
+          <button type="submit" class="btn btn-primary">{t(locale, "secrets.btn_save")}</button>
+          <a href={`/admin/projects/${props.project.id}`} class="btn">{t(locale, "secrets.back")}</a>
         </div>
       </form>
     </Layout>
@@ -161,6 +165,7 @@ const SecretsPage: FC<{
 
 // GET /projects/:pid/environments/:eid/secrets
 app.get("/projects/:pid/environments/:eid/secrets", requireOwnerOrAdmin("pid"), (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("pid"));
   const envId = Number(c.req.param("eid"));
   const withDecrypt = c.req.query("decrypt") === "true";
@@ -171,18 +176,18 @@ app.get("/projects/:pid/environments/:eid/secrets", requireOwnerOrAdmin("pid"), 
     .query<Project, [number]>("SELECT * FROM projects WHERE id = ?")
     .get(projectId);
   if (!project) {
-    return c.redirect(flashRedirect("/admin/projects", "error", "Project not found"));
+    return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_not_found")));
   }
 
   const environment = db
     .query<Environment, [number]>("SELECT * FROM environments WHERE id = ?")
     .get(envId);
   if (!environment) {
-    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", "Environment not found"));
+    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", t(locale, "secrets.env_not_found")));
   }
 
   if (isProjectSealed(projectId) && withDecrypt) {
-    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", "Unseal the project first"));
+    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", t(locale, "flash.unseal_first")));
   }
 
   const projectIds = [projectId];
@@ -205,7 +210,7 @@ app.get("/projects/:pid/environments/:eid/secrets", requireOwnerOrAdmin("pid"), 
         try {
           value = decrypt(masterKey, history.encrypted_value, history.iv_value);
         } catch {
-          value = "[decrypt error]";
+          value = t(locale, "secrets.decrypt_error");
         }
       }
     }
@@ -219,6 +224,7 @@ app.get("/projects/:pid/environments/:eid/secrets", requireOwnerOrAdmin("pid"), 
 
   return c.html(
     <SecretsPage
+      locale={locale}
       project={project}
       environment={environment}
       secrets={secretRows}
@@ -231,13 +237,14 @@ app.get("/projects/:pid/environments/:eid/secrets", requireOwnerOrAdmin("pid"), 
 
 // POST /projects/:pid/environments/:eid/secrets — save secrets
 app.post("/projects/:pid/environments/:eid/secrets", requireOwnerOrAdmin("pid"), async (c) => {
+  const locale = detectLocale(c);
   const projectId = Number(c.req.param("pid"));
   const envId = Number(c.req.param("eid"));
   const baseUrl = `/admin/projects/${projectId}/environments/${envId}/secrets`;
 
   const masterKey = getMasterKey(projectId);
   if (!masterKey) {
-    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", "Unseal the project first"));
+    return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", t(locale, "flash.unseal_first")));
   }
 
   const body = await c.req.parseBody();
@@ -339,7 +346,7 @@ app.post("/projects/:pid/environments/:eid/secrets", requireOwnerOrAdmin("pid"),
     }
   }
 
-  return c.redirect(flashRedirect(baseUrl, "success", "Secrets updated successfully"));
+  return c.redirect(flashRedirect(baseUrl, "success", t(locale, "secrets.flash_updated")));
 });
 
 export default app;

@@ -1,19 +1,22 @@
 import type { FC, PropsWithChildren } from "hono/jsx";
 import { raw } from "hono/html";
+import { t, type Locale, getSupportedLocales } from "../lib/i18n.js";
 
 interface LayoutProps {
   title: string;
+  locale?: Locale;
   flash?: { type: string; message: string };
   projectId?: number;
   projectName?: string;
 }
 
 export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
+  const locale = props.locale ?? "en";
   return (
     <html>
       <head>
         <meta charset="utf-8" />
-        <title>{props.title} - Seklok</title>
+        <title>{props.title} - {t(locale, "site.name")}</title>
         {raw(`<style>
           * { box-sizing: border-box; margin: 0; padding: 0; }
           body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; color: #333; background: #f7f7f7; padding: 0; }
@@ -106,15 +109,23 @@ export const Layout: FC<PropsWithChildren<LayoutProps>> = (props) => {
       </head>
       <body>
         <nav>
-          <a href="/admin">Seklok</a>
+          <a href="/admin">{t(locale, "site.name")}</a>
           <span>/</span>
-          <a href="/admin/projects">projects</a>
+          <a href="/admin/projects">{t(locale, "nav.projects")}</a>
           {props.projectId && (
             <>
               <span>/</span>
               <a href={`/admin/projects/${props.projectId}`}>{props.projectName ?? `#${props.projectId}`}</a>
             </>
           )}
+          <span style="margin-left: auto;">
+            <a href="/auth/logout">{t(locale, "nav.logout")}</a>
+          </span>
+          <span style="margin-left: 8px;">
+            {getSupportedLocales().map((l) => (
+              <a href={`?lang=${l}`} style={`margin-left: 4px; ${l === locale ? 'font-weight: bold;' : ''}`}>{l.toUpperCase()}</a>
+            ))}
+          </span>
         </nav>
         <div class="container">
           {props.flash && (

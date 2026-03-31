@@ -6,6 +6,7 @@ COPY package.json bunfig.toml ./
 RUN bun install --frozen-lockfile || bun install
 
 COPY tsconfig.json ./
+COPY locales/ locales/
 COPY src/ src/
 
 RUN bun x tsc --noEmit

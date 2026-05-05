@@ -74,7 +74,10 @@
   "projects.rotate.warning_text": "Все секреты будут перешифрованы новым мастер-ключом.",
   "projects.rotate.warning_tokens": "Сервисные токены будут аннулированы и потребуют пересоздания.",
   "projects.rotate.current_key": "Текущий мастер-ключ *",
-  "projects.rotate.new_key": "Новый мастер-ключ *",
+  "projects.rotate.current_key_hint": "Введите текущий мастер-ключ проекта, чтобы авторизовать смену.",
+  "projects.rotate.new_key": "Новый мастер-ключ (необязательно)",
+  "projects.rotate.new_key_placeholder": "Оставьте пустым для автогенерации",
+  "projects.rotate.new_key_hint": "Оставьте пустым — Seklok сгенерирует свежий 32-байтный ключ. Заполните только если хотите задать собственный пароль.",
   "projects.rotate.submit": "Сменить",
   "projects.rotate.cancel": "Отмена",
 
@@ -146,5 +149,23 @@
   "error.not_found": "Не найдено",
   "error.internal": "Внутренняя ошибка сервера",
 
-  "default_project": "Мои секреты"
+  "default_project": "Мои секреты",
+
+  "secret_reveal.master_key_title": "Мастер-ключ проекта \"{name}\"",
+  "secret_reveal.master_key_description": "Этот мастер-ключ расшифровывает все секреты, хранящиеся в проекте. Он понадобится после каждого перезапуска сервера (чтобы распечатать проект) и при создании сервисных токенов.",
+  "secret_reveal.master_key_warning": "Ключ показывается ОДИН раз. Открытый текст нигде не сохраняется. Если вы его потеряете, секреты проекта восстановить невозможно.",
+  "secret_reveal.service_token_title": "Сервисный токен \"{name}\"",
+  "secret_reveal.service_token_description": "Используйте этот токен в заголовке Authorization (Bearer ...) для API-запросов. Он содержит мастер-ключ проекта, поэтому любой, кто получит токен, сможет читать/изменять секреты в рамках выданных прав.",
+  "secret_reveal.service_token_warning": "Токен показывается ОДИН раз. Сохраните его в менеджере секретов или CI-переменных перед продолжением.",
+  "secret_reveal.value_label": "Значение секрета",
+  "secret_reveal.show": "Показать",
+  "secret_reveal.hide": "Скрыть",
+  "secret_reveal.download": "Скачать .txt",
+  "secret_reveal.copied": "Скопировано в буфер обмена",
+  "secret_reveal.copy_failed": "Не удалось скопировать — скопируйте вручную",
+  "secret_reveal.confirm_label": "Я надёжно сохранил это значение. Понимаю, что оно больше не будет показано.",
+  "secret_reveal.continue": "Продолжить",
+  "secret_reveal.continue_to_tokens": "Продолжить (проверить сервисные токены)",
+  "secret_reveal.rotated_description": "Смена ключа выполнена. Все секреты проекта перешифрованы новым мастер-ключом. Существующие сервисные токены содержат СТАРЫЙ ключ и должны быть пересозданы.",
+  "secret_reveal.leave_warning": "Вы не подтвердили, что сохранили секрет. Если уйти с этой страницы, значение будет утеряно навсегда."
 }

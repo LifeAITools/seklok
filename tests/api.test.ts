@@ -67,7 +67,7 @@ describe("API Integration Tests", () => {
   });
 
   // ===== 4. Create project via admin POST =====
-  test("POST /admin/projects creates project and returns master key", async () => {
+  test("POST /admin/projects creates project and returns master key in HTML body (NOT in URL)", async () => {
     const formBody = new URLSearchParams({
       name: "test-project",
       description: "Test project for E2E",
@@ -83,14 +83,16 @@ describe("API Integration Tests", () => {
       redirect: "manual",
     });
 
-    // Admin POST redirects to /admin/projects?new_master_key=...
-    expect(res.status).toBe(302);
-    const location = res.headers.get("Location") ?? "";
-    expect(location).toContain("new_master_key=");
+    // Security: master key must be rendered directly in the response body,
+    // never in Location header / redirect URL (would leak to proxy logs).
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Location")).toBeNull();
 
-    // Extract master key from redirect URL
-    const url = new URL(location, "http://localhost");
-    masterKey = url.searchParams.get("new_master_key") ?? "";
+    const html = await res.text();
+    // Extract master key from the readonly input value="..."
+    const match = html.match(/id="reveal_secret_input"[^>]*value="([^"]+)"/);
+    expect(match).not.toBeNull();
+    masterKey = match![1] ?? "";
     expect(masterKey.length).toBeGreaterThan(0);
 
     // Verify project exists
@@ -141,12 +143,14 @@ describe("API Integration Tests", () => {
       redirect: "manual",
     });
 
-    expect(res.status).toBe(302);
-    const location = res.headers.get("Location") ?? "";
-    expect(location).toContain("new_token=");
+    // Security: token must be rendered directly in HTML, never via Location header.
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Location")).toBeNull();
 
-    const url = new URL(location, "http://localhost");
-    publicToken = url.searchParams.get("new_token") ?? "";
+    const html = await res.text();
+    const match = html.match(/id="reveal_secret_input"[^>]*value="([^"]+)"/);
+    expect(match).not.toBeNull();
+    publicToken = match![1] ?? "";
     expect(publicToken.length).toBeGreaterThan(0);
   });
 
@@ -257,10 +261,12 @@ describe("API Integration Tests", () => {
       redirect: "manual",
     });
 
-    expect(res.status).toBe(302);
-    const location = res.headers.get("Location") ?? "";
-    const url = new URL(location, "http://localhost");
-    readOnlyPublicToken = url.searchParams.get("new_token") ?? "";
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Location")).toBeNull();
+    const html = await res.text();
+    const match = html.match(/id="reveal_secret_input"[^>]*value="([^"]+)"/);
+    expect(match).not.toBeNull();
+    readOnlyPublicToken = match![1] ?? "";
     expect(readOnlyPublicToken.length).toBeGreaterThan(0);
   });
 
@@ -319,10 +325,12 @@ describe("API Integration Tests", () => {
       redirect: "manual",
     });
 
-    expect(res.status).toBe(302);
-    const location = res.headers.get("Location") ?? "";
-    const url = new URL(location, "http://localhost");
-    writePublicToken = url.searchParams.get("new_token") ?? "";
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Location")).toBeNull();
+    const html = await res.text();
+    const match = html.match(/id="reveal_secret_input"[^>]*value="([^"]+)"/);
+    expect(match).not.toBeNull();
+    writePublicToken = match![1] ?? "";
     expect(writePublicToken.length).toBeGreaterThan(0);
   });
 
@@ -398,9 +406,11 @@ describe("API Integration Tests", () => {
       redirect: "manual",
     });
 
-    const location = tokenRes.headers.get("Location") ?? "";
-    const url = new URL(location, "http://localhost");
-    const stagingToken = url.searchParams.get("new_token") ?? "";
+    expect(tokenRes.status).toBe(200);
+    const tokenHtml = await tokenRes.text();
+    const tokenMatch = tokenHtml.match(/id="reveal_secret_input"[^>]*value="([^"]+)"/);
+    expect(tokenMatch).not.toBeNull();
+    const stagingToken = tokenMatch![1] ?? "";
 
     // Add a secret ONLY in staging
     const createRes = await req("/api/v1/secrets", {

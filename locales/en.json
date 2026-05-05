@@ -74,7 +74,10 @@
   "projects.rotate.warning_text": "This will re-encrypt all secrets with the new master key.",
   "projects.rotate.warning_tokens": "Service tokens will be invalidated and need to be re-created.",
   "projects.rotate.current_key": "Current Master Key *",
-  "projects.rotate.new_key": "New Master Key *",
+  "projects.rotate.current_key_hint": "Enter the project's current master key to authorise rotation.",
+  "projects.rotate.new_key": "New Master Key (optional)",
+  "projects.rotate.new_key_placeholder": "Leave blank to auto-generate",
+  "projects.rotate.new_key_hint": "Leave blank to have Seklok generate a fresh 32-byte key. Only enter your own value if you want to use a custom passphrase.",
   "projects.rotate.submit": "Rotate",
   "projects.rotate.cancel": "Cancel",
 
@@ -146,5 +149,23 @@
   "error.not_found": "Not Found",
   "error.internal": "Internal Server Error",
 
-  "default_project": "My Secrets"
+  "default_project": "My Secrets",
+
+  "secret_reveal.master_key_title": "Master key for project \"{name}\"",
+  "secret_reveal.master_key_description": "This is the master key that decrypts all secrets you store in this project. You will need it whenever the server restarts (to unseal the project) and when issuing service tokens.",
+  "secret_reveal.master_key_warning": "This key is shown ONCE. We never store the plaintext value. If you lose it, the project's secrets cannot be recovered.",
+  "secret_reveal.service_token_title": "Service token \"{name}\"",
+  "secret_reveal.service_token_description": "Use this token in the Authorization header (Bearer ...) of API requests. It encodes the project's master key, so anyone with this token can read/write the secrets it grants access to.",
+  "secret_reveal.service_token_warning": "This token is shown ONCE. Store it in your secret manager / CI variables before continuing.",
+  "secret_reveal.value_label": "Secret value",
+  "secret_reveal.show": "Show",
+  "secret_reveal.hide": "Hide",
+  "secret_reveal.download": "Download .txt",
+  "secret_reveal.copied": "Copied to clipboard",
+  "secret_reveal.copy_failed": "Copy failed — please copy manually",
+  "secret_reveal.confirm_label": "I have saved this value securely. I understand it will not be shown again.",
+  "secret_reveal.continue": "Continue",
+  "secret_reveal.continue_to_tokens": "Continue (review service tokens)",
+  "secret_reveal.rotated_description": "Rotation succeeded. All secrets in this project have been re-encrypted with this new master key. Existing service tokens still embed the OLD key and must be re-created.",
+  "secret_reveal.leave_warning": "You haven't confirmed that you saved the secret. If you leave this page, the value will be lost forever."
 }

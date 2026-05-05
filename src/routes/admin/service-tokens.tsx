@@ -8,6 +8,7 @@ import {
   type Right,
 } from "../../lib/service-tokens.js";
 import { Layout } from "../../views/layout.js";
+import { SecretRevealPage } from "../../views/secret-reveal.js";
 import { t, type Locale, detectLocale } from "../../lib/i18n.js";
 import { requireAuth } from "../../middleware/session.js";
 import { requireOwnerOrAdmin } from "../../middleware/ownership.js";
@@ -35,23 +36,12 @@ const TokenListPage: FC<{
   locale: Locale;
   project: Project;
   tokens: (ServiceToken & { environment_name: string })[];
-  newPublicToken?: string;
   flash?: { type: string; message: string };
 }> = (props) => {
   const { locale } = props;
   return (
     <Layout title={t(locale, "tokens.title", { name: props.project.name })} locale={locale} flash={props.flash} projectId={props.project.id} projectName={props.project.name}>
       <h1>{t(locale, "tokens.title", { name: props.project.name })}</h1>
-
-      {props.newPublicToken && (
-        <div class="warning">
-          <strong>{t(locale, "tokens.new_generated")}</strong>
-          <div class="copyable">
-            <input id="service_token_input" type="password" value={props.newPublicToken} readonly />
-            <button type="button" class="btn btn-sm" onclick="copyToClipboard('service_token_input')">{t(locale, "projects.btn_copy")}</button>
-          </div>
-        </div>
-      )}
 
       <div class="controls">
         <a class="btn" href={`/admin/projects/${props.project.id}/service-tokens/new`}>{t(locale, "tokens.new_token")}</a>
@@ -161,14 +151,12 @@ app.get("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), (c) => {
     .all(projectId);
 
   const flash = flashFromQuery(c);
-  const newPublicToken = c.req.query("new_token");
 
   return c.html(
     <TokenListPage
       locale={locale}
       project={project}
       tokens={tokens}
-      newPublicToken={newPublicToken}
       flash={flash}
     />
   );
@@ -238,8 +226,18 @@ app.post("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), async (c) 
   const { record: _record, generatedToken } = createServiceToken(projectId, envId, friendlyName, rights);
   const publicToken = encodePublicToken(masterKey, generatedToken);
 
-  return c.redirect(
-    `/admin/projects/${projectId}/service-tokens?new_token=${encodeURIComponent(publicToken)}&flash_type=success&flash_msg=${encodeURIComponent(t(locale, "tokens.flash_created"))}`
+  // Render token directly — NEVER via redirect URL. The public token embeds the master key,
+  // so leaking it via Location header is equally severe. See bug 9c497016 / d664fbf2.
+  return c.html(
+    <SecretRevealPage
+      locale={locale}
+      title={t(locale, "secret_reveal.service_token_title", { name: friendlyName })}
+      description={t(locale, "secret_reveal.service_token_description")}
+      warning={t(locale, "secret_reveal.service_token_warning")}
+      secret={publicToken}
+      downloadFilename={`seklok-service-token-${friendlyName.replace(/[^a-zA-Z0-9-_]/g, "_")}`}
+      continueUrl={`/admin/projects/${projectId}/service-tokens`}
+    />
   );
 });
 

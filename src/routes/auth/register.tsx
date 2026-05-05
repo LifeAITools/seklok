@@ -7,6 +7,7 @@ import { generateVerificationToken, sendVerificationEmail } from "../../lib/emai
 import { generateKeyB64 } from "../../lib/encryption.js";
 import { setMasterKey } from "../../lib/master-keys.js";
 import { Layout } from "../../views/layout.js";
+import { SecretRevealPage } from "../../views/secret-reveal.js";
 import { config } from "../../config.js";
 import { t, type Locale, detectLocale } from "../../lib/i18n.js";
 
@@ -113,7 +114,18 @@ authRegister.post("/register", async (c) => {
   const token = createSession(userId);
   setSessionCookie(c, token);
 
-  return c.redirect(`/admin/projects?new_master_key=${encodeURIComponent(masterKey)}&new_project_name=${encodeURIComponent(defaultProjectName)}&flash_type=success&flash_msg=${encodeURIComponent(t(locale, "auth.register.welcome_flash"))}`);
+  // Render master key directly — never via redirect URL. See bug 9c497016 / d664fbf2.
+  return c.html(
+    <SecretRevealPage
+      locale={locale}
+      title={t(locale, "secret_reveal.master_key_title", { name: defaultProjectName })}
+      description={t(locale, "secret_reveal.master_key_description")}
+      warning={t(locale, "secret_reveal.master_key_warning")}
+      secret={masterKey}
+      downloadFilename={`seklok-master-key-${defaultProjectName.replace(/[^a-zA-Z0-9-_]/g, "_")}`}
+      continueUrl={`/admin/projects/${newProject.id}`}
+    />
+  );
 });
 
 export default authRegister;

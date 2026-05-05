@@ -5,13 +5,13 @@ import { getDb, type Project, type Environment, type Secret, type SecretValueHis
 import { generateKeyB64, encrypt, decrypt } from "../../lib/encryption.js";
 import {
   setMasterKey,
-  getMasterKey,
   isProjectSealed,
   deleteMasterKey,
   prepareMasterKey,
   validateMasterKey,
 } from "../../lib/master-keys.js";
 import { Layout } from "../../views/layout.js";
+import { SecretRevealPage } from "../../views/secret-reveal.js";
 import { t, type Locale, detectLocale } from "../../lib/i18n.js";
 import { requireAuth, type AuthUser } from "../../middleware/session.js";
 import { requireOwnerOrAdmin, getProjectFilter } from "../../middleware/ownership.js";
@@ -38,26 +38,11 @@ const ProjectListPage: FC<{
   locale: Locale;
   projects: (Project & { sealed: boolean })[];
   flash?: { type: string; message: string };
-  newMasterKey?: string;
-  newProjectName?: string;
 }> = (props) => {
   const { locale } = props;
   return (
     <Layout title={t(locale, "projects.title", { count: props.projects.length })} locale={locale} flash={props.flash}>
       <h1>{t(locale, "projects.title", { count: props.projects.length })}</h1>
-
-      {props.newMasterKey && (
-        <div class="warning">
-          <p>
-            <strong>{t(locale, "projects.master_key_generated", { name: props.newProjectName ?? "" })}</strong><br />
-            {t(locale, "projects.master_key_backup")}
-          </p>
-          <div class="copyable">
-            <input id="master_key_input" type="password" value={props.newMasterKey} readonly />
-            <button type="button" class="btn btn-sm" onclick="copyToClipboard('master_key_input')">{t(locale, "projects.btn_copy")}</button>
-          </div>
-        </div>
-      )}
 
       <div class="controls">
         <a class="btn" href="/admin/projects/new">{t(locale, "projects.new_project")}</a>
@@ -189,8 +174,6 @@ const ProjectDetailPage: FC<{
 const RotatePage: FC<{
   locale: Locale;
   project: Project;
-  currentMasterKey: string;
-  newMasterKey: string;
   flash?: { type: string; message: string };
 }> = (props) => {
   const { locale } = props;
@@ -207,12 +190,13 @@ const RotatePage: FC<{
         <fieldset>
           <div class="form-group">
             <label for="current_master_key">{t(locale, "projects.rotate.current_key")}</label>
-            <input type="password" name="current_master_key" id="current_master_key" value={props.currentMasterKey} />
+            <input type="password" name="current_master_key" id="current_master_key" placeholder={t(locale, "projects.detail.key_placeholder")} required />
+            <p style="font-size: 12px; color: #666; margin-top: 4px;">{t(locale, "projects.rotate.current_key_hint")}</p>
           </div>
           <div class="form-group">
             <label for="new_master_key">{t(locale, "projects.rotate.new_key")}</label>
-            <input type="password" name="new_master_key" id="new_master_key" value={props.newMasterKey} />
-            <button type="button" class="btn btn-sm" onclick="copyToClipboard('new_master_key')">{t(locale, "projects.btn_copy")}</button>
+            <input type="password" name="new_master_key" id="new_master_key" placeholder={t(locale, "projects.rotate.new_key_placeholder")} />
+            <p style="font-size: 12px; color: #666; margin-top: 4px;">{t(locale, "projects.rotate.new_key_hint")}</p>
           </div>
           <div class="form-actions">
             <button type="submit" class="btn btn-primary">{t(locale, "projects.rotate.submit")}</button>
@@ -296,16 +280,12 @@ app.get("/", (c) => {
   }));
 
   const flash = flashFromQuery(c);
-  const newMasterKey = c.req.query("new_master_key");
-  const newProjectName = c.req.query("new_project_name");
 
   return c.html(
     <ProjectListPage
       locale={locale}
       projects={enriched}
       flash={flash}
-      newMasterKey={newMasterKey}
-      newProjectName={newProjectName}
     />
   );
 });
@@ -356,15 +336,26 @@ app.post("/", async (c) => {
     return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_create_failed")));
   }
 
-  // Generate master key only for root projects
+  // Generate master key only for root projects.
+  // CRITICAL: master key is rendered directly in this POST response — NEVER placed in a redirect URL.
+  // Putting secrets in Location/query strings leaks them into reverse-proxy logs, browser history,
+  // and Referer headers. See bug 9c497016 / d664fbf2.
   if (!parentId) {
     const masterKey = generateKeyB64();
     setMasterKey(project.id, masterKey);
     const hasher = new Bun.CryptoHasher("sha256");
     hasher.update(masterKey);
     db.prepare("UPDATE projects SET master_key_hash = ? WHERE id = ?").run(hasher.digest("hex"), project.id);
-    return c.redirect(
-      `/admin/projects?new_master_key=${encodeURIComponent(masterKey)}&new_project_name=${encodeURIComponent(name)}&flash_type=success&flash_msg=${encodeURIComponent(t(locale, "flash.project_created_key"))}`
+    return c.html(
+      <SecretRevealPage
+        locale={locale}
+        title={t(locale, "secret_reveal.master_key_title", { name })}
+        description={t(locale, "secret_reveal.master_key_description")}
+        warning={t(locale, "secret_reveal.master_key_warning")}
+        secret={masterKey}
+        downloadFilename={`seklok-master-key-${name.replace(/[^a-zA-Z0-9-_]/g, "_")}`}
+        continueUrl={`/admin/projects/${project.id}`}
+      />
     );
   }
 
@@ -488,38 +479,33 @@ app.get("/:id/rotate", requireOwnerOrAdmin("id"), (c) => {
     return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_not_found")));
   }
 
-  const currentMasterKey = getMasterKey(projectId);
-  if (!currentMasterKey) {
+  // Project must be unsealed to rotate (we need the current key in memory to re-encrypt)
+  if (isProjectSealed(projectId)) {
     return c.redirect(flashRedirect(`/admin/projects/${projectId}`, "error", t(locale, "flash.unseal_first")));
   }
 
-  const newMasterKey = generateKeyB64();
   const flash = flashFromQuery(c);
 
   return c.html(
     <RotatePage
       locale={locale}
       project={project}
-      currentMasterKey={currentMasterKey}
-      newMasterKey={newMasterKey}
       flash={flash}
     />
   );
 });
 
-// POST /projects/:id/rotate — perform rotation
+// POST /projects/:id/rotate — perform rotation, then render new key via SecretRevealPage
 app.post("/:id/rotate", requireOwnerOrAdmin("id"), async (c) => {
   const locale = detectLocale(c);
   const projectId = Number(c.req.param("id"));
   const body = await c.req.parseBody();
-  const currentMasterKeyRaw = String(body["current_master_key"] ?? "");
-  const newMasterKeyRaw = String(body["new_master_key"] ?? "");
+  const currentMasterKeyRaw = String(body["current_master_key"] ?? "").trim();
+  const newMasterKeyInput = String(body["new_master_key"] ?? "").trim();
 
-  if (!currentMasterKeyRaw || !newMasterKeyRaw) {
+  if (!currentMasterKeyRaw) {
     return c.redirect(flashRedirect(`/admin/projects/${projectId}/rotate`, "error", t(locale, "flash.keys_required")));
   }
-
-  const newMasterKey = prepareMasterKey(newMasterKeyRaw);
 
   const db = getDb();
   const project = db
@@ -529,6 +515,17 @@ app.post("/:id/rotate", requireOwnerOrAdmin("id"), async (c) => {
   if (!project) {
     return c.redirect(flashRedirect("/admin/projects", "error", t(locale, "flash.project_not_found")));
   }
+
+  // Validate the supplied current key against stored hash before doing anything destructive
+  const preparedCurrent = prepareMasterKey(currentMasterKeyRaw);
+  if (!validateMasterKey(projectId, preparedCurrent)) {
+    return c.redirect(flashRedirect(`/admin/projects/${projectId}/rotate`, "error", t(locale, "flash.invalid_key")));
+  }
+
+  // New key: user-supplied (custom passphrase) OR server-generated
+  const newMasterKey = newMasterKeyInput
+    ? prepareMasterKey(newMasterKeyInput)
+    : generateKeyB64();
 
   // Get all secrets for project (+ parent)
   const projectIds = [projectId];
@@ -555,7 +552,7 @@ app.post("/:id/rotate", requireOwnerOrAdmin("id"), async (c) => {
 
     let plaintext: string;
     try {
-      plaintext = decrypt(currentMasterKeyRaw, latestHistory.encrypted_value, latestHistory.iv_value);
+      plaintext = decrypt(preparedCurrent, latestHistory.encrypted_value, latestHistory.iv_value);
     } catch {
       continue;
     }
@@ -576,7 +573,19 @@ app.post("/:id/rotate", requireOwnerOrAdmin("id"), async (c) => {
   rotateHasher.update(newMasterKey);
   db.prepare("UPDATE projects SET master_key_hash = ? WHERE id = ?").run(rotateHasher.digest("hex"), projectId);
 
-  return c.redirect(`/admin/projects/${projectId}/rotate-post`);
+  // Render new master key directly — never via redirect URL.
+  return c.html(
+    <SecretRevealPage
+      locale={locale}
+      title={t(locale, "secret_reveal.master_key_title", { name: project.name })}
+      description={t(locale, "secret_reveal.rotated_description")}
+      warning={t(locale, "secret_reveal.master_key_warning")}
+      secret={newMasterKey}
+      downloadFilename={`seklok-master-key-${project.name.replace(/[^a-zA-Z0-9-_]/g, "_")}-rotated`}
+      continueUrl={`/admin/projects/${projectId}/rotate-post`}
+      continueLabel={t(locale, "secret_reveal.continue_to_tokens")}
+    />
+  );
 });
 
 // GET /projects/:id/rotate-post — post-rotation page (G-04)

@@ -24,6 +24,8 @@ app.get("/", (c) => {
       projects_total: projects.length,
       projects_unsealed: unsealed.length,
       master_key_expiration_seconds: config.masterKeyExpiration,
+      auto_reseal_enabled: !config.masterKeyDisableAutoReseal,
+      auto_unseal_enabled: config.autoUnsealFile !== "",
     });
   } catch {
     return c.json({ db: "down" }, 500);

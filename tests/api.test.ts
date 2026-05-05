@@ -456,6 +456,23 @@ describe("API Integration Tests", () => {
     expect(res.status).toBe(403);
   });
 
+  // ===== Integration: status endpoint exposes unseal state and config =====
+  test("GET /api/v1/status reports auto-reseal/auto-unseal config flags", async () => {
+    const res = await req("/api/v1/status");
+    expect(res.status).toBe(200);
+    const body = await res.json();
+
+    // Default config: auto-reseal ON, auto-unseal OFF.
+    // (test setup at top of file does not set MASTER_KEY_DISABLE_AUTO_RESEAL or SEKLOK_AUTO_UNSEAL_FILE)
+    expect(body.auto_reseal_enabled).toBe(true);
+    expect(body.auto_unseal_enabled).toBe(false);
+    expect(typeof body.master_key_expiration_seconds).toBe("number");
+
+    // After test #4 (POST /admin/projects), at least one project exists and was unsealed
+    expect(body.projects_total).toBeGreaterThanOrEqual(1);
+    expect(body.projects_unsealed).toBeGreaterThanOrEqual(1);
+  });
+
   // ===== 26. Admin token CAN delete =====
   test("admin token can DELETE /api/v1/secrets/:id", async () => {
     // First create a throwaway secret to delete

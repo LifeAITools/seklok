@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { config } from "./config.js";
 import { initDb } from "./db.js";
+import { autoUnseal } from "./lib/master-keys.js";
 
 // API routes
 import statusRoutes from "./routes/api/status.js";
@@ -190,8 +191,13 @@ app.notFound((c) => {
   );
 });
 
-// Initialize database
+// Initialize database (must run before autoUnseal — autoUnseal reads projects table)
 initDb(config.availableEnvironments);
+
+// Opt-in auto-unseal at boot. No-op when SEKLOK_AUTO_UNSEAL_FILE is unset.
+// Failures (missing file, wrong mode, hash mismatch) are non-fatal: the server
+// always starts, and operators retain manual unseal as the fallback.
+autoUnseal();
 
 console.log(`[seklok] Starting on port ${config.port}`);
 

@@ -103,12 +103,16 @@ authRegister.post("/register", async (c) => {
   hasher.update(masterKey);
   db.prepare("UPDATE projects SET master_key_hash = ? WHERE id = ?").run(hasher.digest("hex"), newProject.id);
 
-  // Send verification email (non-blocking — don't fail registration if email fails)
+  // Send verification email (truly non-blocking — fire-and-forget so a slow or
+  // unreachable SMTP server cannot stall the request and prevent the user from
+  // ever seeing their master key. We only log failures.
   try {
     const verifyToken = generateVerificationToken(userId);
-    await sendVerificationEmail(email, verifyToken);
+    void sendVerificationEmail(email, verifyToken).catch((err) => {
+      console.error("[seklok] Failed to send verification email:", err);
+    });
   } catch (err) {
-    console.error("[seklok] Failed to send verification email:", err);
+    console.error("[seklok] Failed to schedule verification email:", err);
   }
 
   const token = createSession(userId);

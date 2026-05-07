@@ -47,9 +47,18 @@ app.post("/", requireRight("admin"), async (c) => {
       rights: Right[];
     }>();
 
-    if (!body.friendly_name || !body.environment_id || !body.rights) {
+    if (
+      !body.friendly_name ||
+      !body.environment_id ||
+      !Array.isArray(body.rights) ||
+      body.rights.length === 0
+    ) {
       return c.json(
-        { error: "BadRequest", message: "friendly_name, environment_id, and rights are required" },
+        {
+          error: "BadRequest",
+          message:
+            "friendly_name, environment_id, and a non-empty rights array are required",
+        },
         400
       );
     }

@@ -496,4 +496,79 @@ describe("API Integration Tests", () => {
     const body = await res.json();
     expect(body.deleted).toBe(true);
   });
+
+  // ===== Regression tests for UX-test fixes (2026-05) =====
+
+  // F36-ISS-001: GET /api/v1/projects must NOT leak other tenants' projects.
+  // The token is bound to projectId=1; creating a sibling root project must not
+  // make it appear in the bearer's list response.
+  test("F36-ISS-001: project list is scoped to bearer token's project subtree", async () => {
+    // Create a sibling root project (different tenant) via Basic Auth UI route
+    const createRes = await req("/admin/projects", {
+      method: "POST",
+      headers: {
+        Authorization: basicAuthHeader(),
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: "name=sibling-tenant&description=other+tenant",
+    });
+    expect([200, 302]).toContain(createRes.status);
+
+    // List via bearer token bound to project 1
+    const listRes = await req("/api/v1/projects", {
+      headers: { Authorization: `Bearer ${publicToken}` },
+    });
+    expect(listRes.status).toBe(200);
+    const body = (await listRes.json()) as { projects: { id: number; name: string }[] };
+    const names = body.projects.map((p) => p.name);
+    // Bearer's own project must be present
+    expect(body.projects.some((p) => p.id === projectId)).toBe(true);
+    // Other tenants must NOT be visible
+    expect(names).not.toContain("sibling-tenant");
+  });
+
+  // F26-ISS-001: API service-token creation must reject empty rights.
+  test("F26-ISS-001: POST /api/v1/service-tokens rejects empty rights array", async () => {
+    const res = await req("/api/v1/service-tokens", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${publicToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        friendly_name: "no-rights",
+        environment_id: 1,
+        rights: [],
+      }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe("BadRequest");
+    expect(body.message).toMatch(/rights/i);
+  });
+
+  // F07-ISS-001: schema migration must drop the legacy global UNIQUE(name)
+  // so multiple users may have a project named the same (e.g. "My Secrets").
+  test("F07-ISS-001: projects.name is no longer globally UNIQUE", async () => {
+    // Use the underlying DB directly to assert schema shape.
+    const { getDb } = await import("../src/db.js");
+    const schemaRow = getDb()
+      .query<{ sql: string }, []>(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'"
+      )
+      .get();
+    expect(schemaRow).not.toBeNull();
+    expect(schemaRow!.sql).not.toMatch(/name\s+TEXT\s+UNIQUE/i);
+
+    // And that two projects with same name + different (NULL/non-NULL) owners
+    // can coexist. We use raw INSERT here because the API layer enforces other
+    // constraints; we are asserting the schema-level behaviour only.
+    const db = getDb();
+    db.prepare("INSERT INTO projects (name, description) VALUES (?, '')").run("dup");
+    db.prepare("INSERT INTO projects (name, description) VALUES (?, '')").run("dup");
+    const dups = db
+      .query<{ c: number }, []>("SELECT COUNT(*) AS c FROM projects WHERE name = 'dup'")
+      .get();
+    expect(dups!.c).toBe(2);
+  });
 });

@@ -208,18 +208,20 @@ app.post("/projects/:pid/service-tokens", requireOwnerOrAdmin("pid"), async (c) 
   const friendlyName = String(body["friendly_name"] ?? "").trim();
   const envId = Number(body["environment_id"]);
 
-  // Rights can come as single string or array
+  // Rights can come as single string or array. Empty submissions must be rejected
+  // explicitly so operators do not unintentionally create read-only tokens when
+  // they meant a different scope (bug F26-ISS-001 / 2026-05).
   let rightsRaw = body["rights"];
   let rights: Right[];
   if (Array.isArray(rightsRaw)) {
-    rights = rightsRaw.map((r) => String(r) as Right);
-  } else if (rightsRaw) {
+    rights = rightsRaw.map((r) => String(r) as Right).filter((r) => r.length > 0);
+  } else if (rightsRaw && String(rightsRaw).length > 0) {
     rights = [String(rightsRaw) as Right];
   } else {
-    rights = ["read"];
+    rights = [];
   }
 
-  if (!friendlyName || isNaN(envId)) {
+  if (!friendlyName || isNaN(envId) || rights.length === 0) {
     return c.redirect(flashRedirect(`/admin/projects/${projectId}/service-tokens/new`, "error", t(locale, "tokens.err_required")));
   }
 

@@ -13,13 +13,27 @@ const app = new Hono();
 
 app.use("*", serviceTokenAuth);
 
-// GET / — list projects
+// GET / — list projects scoped to the bearer token's project (and its sub-tree).
+// Security: bearer tokens MUST NOT see other tenants' project names. Bug F36-ISS-001
+// (2026-05) — historic implementation returned the global list.
 app.get("/", requireRight("read"), (c) => {
   try {
     const db = getDb();
+    const auth = c.get("auth");
+    // Recursive descent: token's project + all descendants (children inherit master key).
     const projects = db
-      .query<Project, []>("SELECT id, name, description, parent_id FROM projects")
-      .all();
+      .query<Project, [number]>(
+        `WITH RECURSIVE project_tree(id) AS (
+           SELECT ?
+           UNION ALL
+           SELECT p.id FROM projects p
+           JOIN project_tree t ON p.parent_id = t.id
+         )
+         SELECT p.id, p.name, p.description, p.parent_id
+         FROM projects p
+         WHERE p.id IN (SELECT id FROM project_tree)`
+      )
+      .all(auth.projectId);
     return c.json({ projects });
   } catch (e) {
     return c.json(

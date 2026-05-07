@@ -121,13 +121,6 @@ export function initDb(environments: string[]): void {
       owner_id TEXT REFERENCES users(id),
       master_key_hash TEXT
     );
-    -- Per-owner uniqueness (admin-bootstrapped projects share owner_id=NULL but
-    -- multiple users may legitimately name their default project "My Secrets").
-    -- Old schema had a global UNIQUE(name) constraint that broke registration
-    -- after the first user (bug F07-ISS-001 / 2026-05). Migration below rebuilds
-    -- the table to drop the global UNIQUE if present.
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_owner_name
-      ON projects(owner_id, name) WHERE owner_id IS NOT NULL;
 
     CREATE TABLE IF NOT EXISTS environments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -182,13 +175,16 @@ export function initDb(environments: string[]): void {
   // Migration: drop legacy global UNIQUE(name) constraint that prevented multiple
   // users from having same default project name "My Secrets" (bug F07-ISS-001).
   // SQLite has no DROP CONSTRAINT, so we rebuild the table when the old schema
-  // is detected. Idempotent — runs once per upgrade.
+  // is detected. Idempotent — runs once per upgrade. Must run BEFORE creating
+  // the new partial index, because rebuilding the projects table drops indices
+  // that reference it.
   const projectsSchema = database
     .query("SELECT sql FROM sqlite_master WHERE type='table' AND name='projects'")
     .get() as { sql: string } | null;
   if (projectsSchema && /name\s+TEXT\s+UNIQUE/i.test(projectsSchema.sql)) {
     console.log("[seklok][migration] Rebuilding projects table to drop UNIQUE(name) constraint");
     database.exec(`
+      DROP INDEX IF EXISTS idx_projects_owner_name;
       BEGIN;
       CREATE TABLE projects_new (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -202,11 +198,16 @@ export function initDb(environments: string[]): void {
         SELECT id, parent_id, name, description, owner_id, master_key_hash FROM projects;
       DROP TABLE projects;
       ALTER TABLE projects_new RENAME TO projects;
-      CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_owner_name
-        ON projects(owner_id, name) WHERE owner_id IS NOT NULL;
       COMMIT;
     `);
   }
+
+  // Per-owner uniqueness (admin-bootstrapped projects share owner_id=NULL but
+  // multiple users may legitimately name their default project the same).
+  database.exec(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_owner_name
+      ON projects(owner_id, name) WHERE owner_id IS NOT NULL;
+  `);
 
   const insert = database.prepare(
     "INSERT OR IGNORE INTO environments (name) VALUES (?)"

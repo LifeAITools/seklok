@@ -151,6 +151,7 @@ app.get("/", (c) => {
 
 // API routes (service token auth applied inside each route file)
 app.route("/api/v1/status", statusRoutes);
+app.route("/health", statusRoutes);
 app.route("/api/v1/secrets", secretsRoutes);
 app.route("/api/v1/projects", projectsRoutes);
 app.route("/api/v1/service-tokens", serviceTokensRoutes);

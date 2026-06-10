@@ -6,7 +6,7 @@ Open-source secrets manager for developers. Simple, fast, self-hosted.
 
 - Zero-config secret storage
 - Environment-based access control
-- CLI & API access
+- REST API access with scoped service tokens
 - Self-hosted — your secrets stay on your infrastructure
 
 ## Quick Start

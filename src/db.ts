@@ -219,7 +219,11 @@ export function initDb(environments: string[]): void {
   seedAdmin(database);
 }
 
-async function seedAdmin(database: Database): Promise<void> {
+// Synchronous by design: initDb() calls this inline and is itself invoked
+// synchronously at boot (index.tsx) BEFORE the server starts serving. Using the
+// async hash here (fire-and-forget) let the first request race ahead of the seed
+// → empty users table → FK failure on project create. hashSync closes that race.
+function seedAdmin(database: Database): void {
   const existing = database
     .query("SELECT id FROM users WHERE role = 'admin' LIMIT 1")
     .get() as { id: string } | null;
@@ -229,7 +233,7 @@ async function seedAdmin(database: Database): Promise<void> {
   if (!config.adminUser || !config.adminPass) return;
 
   const adminId = crypto.randomUUID();
-  const passwordHash = await Bun.password.hash(config.adminPass, {
+  const passwordHash = Bun.password.hashSync(config.adminPass, {
     algorithm: "argon2id",
   });
 

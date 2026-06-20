@@ -14,14 +14,14 @@ import { describe, test, expect, beforeAll, afterAll } from 'bun:test'
 import { randomBytes } from 'node:crypto'
 import {
   req,
-  basicAuthHeader,
-  extractRevealValue,
   provisionTree,
+  probeKeyDelivery,
   mintToken,
   putSecret,
   tamperMasterKey,
   startTarget,
   stopTarget,
+  HAS_AUTH,
   type Tree,
 } from './harness.js'
 
@@ -39,18 +39,13 @@ afterAll(stopTarget)
 // --- Invariant 1: master-key material is in the BODY, never a header / URL ---
 describe('INV-1: master key never in headers or URL', () => {
   test('project creation renders the key in the body, Location is null', async () => {
-    const res = await req('/admin/projects', {
-      method: 'POST',
-      headers: { Authorization: basicAuthHeader(), 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ name: 'inv-1-probe', description: 'probe' }).toString(),
-      redirect: 'manual',
-    })
-    expect(res.status).toBe(200)
-    expect(res.headers.get('Location')).toBeNull()
-    const key = extractRevealValue(await res.text())
+    // The create call is the one target-specific step (admin-UI vs control-API),
+    // so it rides the provisioner seam; the assertion stays canonical here.
+    const { key, headerValues, location } = await probeKeyDelivery('inv-1-probe')
+    expect(location).toBeNull()
     expect(key.length).toBeGreaterThan(0)
     // The key must not appear in ANY response header.
-    for (const [, v] of res.headers.entries()) expect(v).not.toContain(key)
+    for (const v of headerValues) expect(v).not.toContain(key)
   })
 
   test('API token issuance returns the token in the JSON body, not a header', async () => {
@@ -197,7 +192,15 @@ describe('INV-7: wrong master key is rejected', () => {
 })
 
 // --- Invariant 8: auth endpoints are rate-limited ---------------------------
-describe('INV-8: rate limiting on auth endpoints', () => {
+// Gated on the target actually having a session-auth surface. Public seklok
+// always does (runs here); the engine gains `/auth/*` with full P4, until then
+// its REMOTE runner leaves SEKLOK_HAS_AUTH unset → this block is skipped LOUDLY
+// (bun marks it skipped), never silently passed as if covered.
+if (!HAS_AUTH) {
+  // eslint-disable-next-line no-console
+  console.warn('[invariants] INV-8 skipped: target has no /auth surface (set SEKLOK_HAS_AUTH=1 once P4 lands)')
+}
+describe.skipIf(!HAS_AUTH)('INV-8: rate limiting on auth endpoints', () => {
   test('POST /auth/login is capped (a burst hits 429)', async () => {
     const statuses: number[] = []
     for (let i = 0; i < 12; i++) {

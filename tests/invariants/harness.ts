@@ -35,6 +35,15 @@ const REMOTE_URL = process.env.SEKLOK_TARGET_URL ?? ''
 export const IS_LOCAL = REMOTE_URL === ''
 const BASE = IS_LOCAL ? `http://localhost:${PORT}` : REMOTE_URL
 
+/**
+ * Whether the target exposes the session-auth surface (rate-limited `/auth/*`).
+ * Public seklok always does, so invariant 8 runs here unconditionally. The engine
+ * gains it only with full P4 (session-auth control plane); until then its REMOTE
+ * runner leaves `SEKLOK_HAS_AUTH` unset and invariant 8 is skipped (loudly), NOT
+ * silently dropped. Once P4 lands the runner sets `SEKLOK_HAS_AUTH=1` → 8/8.
+ */
+export const HAS_AUTH = IS_LOCAL || process.env.SEKLOK_HAS_AUTH === '1'
+
 let child: Subprocess | null = null
 
 /** Spawn the public-seklok app as an isolated subprocess (LOCAL mode only). */
@@ -125,68 +134,132 @@ export interface Tree {
   adminToken: string
 }
 
+/** How the target delivered a freshly-created project's master key (invariant 1
+ *  source probe): the key, every response-header value, and the Location header. */
+export interface KeyDelivery {
+  key: string
+  headerValues: string[]
+  location: string | null
+}
+
+/** Transport seam handed to a provisioner — the resolved-target `fetch` + admin
+ *  basic-auth header. A provisioner is otherwise a pure black box: it speaks only
+ *  this context, never the harness internals, so it can live in another repo. */
+export interface ProvisionContext {
+  req: (path: string, init?: RequestInit) => Promise<Response>
+  basicAuthHeader: () => string
+}
+
 /**
- * Provision a fresh project tree + admin token. BASELINE (LOCAL) provisioner —
- * it reads the throwaway sqlite to resolve the integer ids the admin UI does not
- * echo (quarantined here; the invariant assertions never touch the DB). The
- * engine adapter (T2.7) replaces this with control-API calls.
+ * The ONLY target-specific seam. Everything the invariants assert rides the
+ * stable `/api/v1/*` data plane (identical across deployments); only *bootstrap*
+ * — create a project tree + mint its first admin token, and how the master key
+ * is delivered — differs (admin-UI here, control-API in the engine). A REMOTE
+ * target injects its own implementation via `SEKLOK_PROVISIONER_MODULE` so the
+ * assertion suite stays a single canonical source, never forked.
  */
-export async function provisionTree(label: string): Promise<Tree> {
-  if (!IS_LOCAL) {
+export interface Provisioner {
+  provisionTree(label: string, ctx: ProvisionContext): Promise<Tree>
+  probeKeyDelivery(label: string, ctx: ProvisionContext): Promise<KeyDelivery>
+}
+
+/** BASELINE (LOCAL) provisioner — public AGPL seklok via the admin UI. It reads
+ *  the throwaway sqlite to resolve the integer ids the admin UI does not echo
+ *  (quarantined here; the invariant assertions never touch the DB). */
+const localAdminUiProvisioner: Provisioner = {
+  async provisionTree(label, ctx): Promise<Tree> {
+    // 1. Create the project — master key is rendered in the BODY (Location null).
+    const createRes = await ctx.req('/admin/projects', {
+      method: 'POST',
+      headers: { Authorization: ctx.basicAuthHeader(), 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ name: label, description: `invariant tree ${label}` }).toString(),
+      redirect: 'manual',
+    })
+    if (createRes.status !== 200) {
+      const loc = createRes.headers.get('Location')
+      throw new Error(`provisionTree(${label}): project create returned ${createRes.status} (Location=${loc})`)
+    }
+    const masterKey = extractRevealValue(await createRes.text())
+    if (!masterKey) throw new Error(`provisionTree(${label}): master key not found in body`)
+
+    // 2. Resolve the integer ids the admin UI did not echo (baseline only).
+    const db = new Database(TEST_DB, { readonly: true })
+    const projectRow = db
+      .query<{ id: number }, [string]>('SELECT id FROM projects WHERE name = ? ORDER BY id DESC LIMIT 1')
+      .get(label)
+    const envRow = db.query<{ id: number }, []>("SELECT id FROM environments WHERE name = 'development'").get()
+    db.close()
+    if (!projectRow || !envRow) throw new Error(`provisionTree(${label}): id resolution failed`)
+
+    // 3. Mint an admin service-token via the admin UI (token rendered in body).
+    const tokenRes = await ctx.req(`/admin/projects/${projectRow.id}/service-tokens`, {
+      method: 'POST',
+      headers: { Authorization: ctx.basicAuthHeader(), 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        friendly_name: `${label}-admin`,
+        environment_id: String(envRow.id),
+        rights: 'admin',
+      }).toString(),
+      redirect: 'manual',
+    })
+    if (tokenRes.status !== 200) {
+      throw new Error(`provisionTree(${label}): token create returned ${tokenRes.status}`)
+    }
+    const adminToken = extractRevealValue(await tokenRes.text())
+    if (!adminToken) throw new Error(`provisionTree(${label}): admin token not found in body`)
+
+    return { label, masterKey, projectId: projectRow.id, envId: envRow.id, adminToken }
+  },
+
+  async probeKeyDelivery(label, ctx): Promise<KeyDelivery> {
+    const res = await ctx.req('/admin/projects', {
+      method: 'POST',
+      headers: { Authorization: ctx.basicAuthHeader(), 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ name: label, description: 'invariant key-delivery probe' }).toString(),
+      redirect: 'manual',
+    })
+    if (res.status !== 200) throw new Error(`probeKeyDelivery(${label}): create returned ${res.status}`)
+    const key = extractRevealValue(await res.text())
+    return { key, headerValues: [...res.headers.values()], location: res.headers.get('Location') }
+  },
+}
+
+/** Lazily-resolved active provisioner: LOCAL baseline, or the REMOTE module the
+ *  target injects via `SEKLOK_PROVISIONER_MODULE` (dynamic import — the public
+ *  repo carries ZERO knowledge of any specific remote target). */
+let activeProvisioner: Provisioner | null = null
+async function getProvisioner(): Promise<Provisioner> {
+  if (activeProvisioner) return activeProvisioner
+  if (IS_LOCAL) {
+    activeProvisioner = localAdminUiProvisioner
+    return activeProvisioner
+  }
+  const modulePath = process.env.SEKLOK_PROVISIONER_MODULE
+  if (!modulePath) {
     throw new Error(
-      'provisionTree: REMOTE-target provisioning is supplied by the engine adapter (P2/T2.7), not the baseline harness',
+      'REMOTE mode (SEKLOK_TARGET_URL set) requires SEKLOK_PROVISIONER_MODULE — an absolute path to a module ' +
+        'whose default export implements the Provisioner interface (the engine ships its control-API provisioner).',
     )
   }
-
-  // 1. Create the project — master key is rendered in the BODY (Location null).
-  const createRes = await req('/admin/projects', {
-    method: 'POST',
-    headers: {
-      Authorization: basicAuthHeader(),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({ name: label, description: `invariant tree ${label}` }).toString(),
-    redirect: 'manual',
-  })
-  if (createRes.status !== 200) {
-    const loc = createRes.headers.get('Location')
-    throw new Error(`provisionTree(${label}): project create returned ${createRes.status} (Location=${loc})`)
+  const imported = (await import(modulePath)) as { default?: Provisioner; provisioner?: Provisioner }
+  const provisioner = imported.default ?? imported.provisioner
+  if (!provisioner || typeof provisioner.provisionTree !== 'function') {
+    throw new Error(`SEKLOK_PROVISIONER_MODULE (${modulePath}) does not default-export a Provisioner`)
   }
-  const masterKey = extractRevealValue(await createRes.text())
-  if (!masterKey) throw new Error(`provisionTree(${label}): master key not found in body`)
+  activeProvisioner = provisioner
+  return activeProvisioner
+}
 
-  // 2. Resolve the integer ids the admin UI did not echo (baseline only).
-  const db = new Database(TEST_DB, { readonly: true })
-  const projectRow = db
-    .query<{ id: number }, [string]>('SELECT id FROM projects WHERE name = ? ORDER BY id DESC LIMIT 1')
-    .get(label)
-  const envRow = db
-    .query<{ id: number }, []>("SELECT id FROM environments WHERE name = 'development'")
-    .get()
-  db.close()
-  if (!projectRow || !envRow) throw new Error(`provisionTree(${label}): id resolution failed`)
+const provisionCtx = (): ProvisionContext => ({ req, basicAuthHeader })
 
-  // 3. Mint an admin service-token via the admin UI (token rendered in body).
-  const tokenRes = await req(`/admin/projects/${projectRow.id}/service-tokens`, {
-    method: 'POST',
-    headers: {
-      Authorization: basicAuthHeader(),
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      friendly_name: `${label}-admin`,
-      environment_id: String(envRow.id),
-      rights: 'admin',
-    }).toString(),
-    redirect: 'manual',
-  })
-  if (tokenRes.status !== 200) {
-    throw new Error(`provisionTree(${label}): token create returned ${tokenRes.status}`)
-  }
-  const adminToken = extractRevealValue(await tokenRes.text())
-  if (!adminToken) throw new Error(`provisionTree(${label}): admin token not found in body`)
+/** Provision a fresh project tree + admin token against the resolved target. */
+export async function provisionTree(label: string): Promise<Tree> {
+  return (await getProvisioner()).provisionTree(label, provisionCtx())
+}
 
-  return { label, masterKey, projectId: projectRow.id, envId: envRow.id, adminToken }
+/** Invariant-1 source probe: create a project and report how its key was delivered. */
+export async function probeKeyDelivery(label: string): Promise<KeyDelivery> {
+  return (await getProvisioner()).probeKeyDelivery(label, provisionCtx())
 }
 
 /** Mint a scoped service-token via the DATA-PLANE API (portable path). The API
